@@ -4,26 +4,35 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertaResponse } from '@reunipet/shared';
-import { AppHeader } from '@/components/AppHeader';
 import { AlertCard } from '@/components/alertas/AlertCard';
-import { API_URL, getSessionHeaders } from '@/lib/api';
+import { MapPin } from 'lucide-react';
+import { getAlertas, marcarVista } from '@/lib/api';
 
-async function fetchAlertas(): Promise<AlertaResponse[]> {
-  const res = await fetch(`${API_URL}/usuarios/me/alertas`, {
-    headers: getSessionHeaders(),
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`Error ${res.status}`);
-  return (await res.json()) as AlertaResponse[];
-}
-
-async function marcarVista(id: string): Promise<void> {
-  const res = await fetch(`${API_URL}/alertas/${id}/visto`, {
-    method: 'PATCH',
-    headers: getSessionHeaders(),
-  });
-  if (!res.ok) throw new Error(`Error ${res.status}`);
-}
+// TODO(Sprint2): "Recientes en tu zona" debe conectarse a HU6/HU7 (feed de
+// hallazgos cercanos con geolocalización). Por ahora son datos mock.
+const RECIENTES_MOCK = [
+  {
+    id: 'mock-1',
+    especie: 'Perro mestizo',
+    color: 'Blanco con manchas negras',
+    lugar: 'Plaza del Sol',
+    tiempo: 'hace 2 horas',
+  },
+  {
+    id: 'mock-2',
+    especie: 'Gato naranja',
+    color: 'Naranja atigrado',
+    lugar: 'Calle 12 con Av. Central',
+    tiempo: 'hace 5 horas',
+  },
+  {
+    id: 'mock-3',
+    especie: 'Perro labrador',
+    color: 'Dorado',
+    lugar: 'Parque Municipal',
+    tiempo: 'ayer',
+  },
+];
 
 function tiempoRelativo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -52,7 +61,7 @@ export default function AlertasPage(): React.JSX.Element {
 
   const cargar = React.useCallback(async () => {
     try {
-      setAlertas(await fetchAlertas());
+      setAlertas(await getAlertas());
       setError(null);
     } catch {
       setError('No se pudieron cargar las alertas.');
@@ -79,25 +88,54 @@ export default function AlertasPage(): React.JSX.Element {
   }
 
   function handleVer(alerta: AlertaResponse): void {
-    router.push(`/reportes/${alerta.reporteEncontrada.id}`);
+    router.push(`/comparador/${alerta.coincidenciaId}`);
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <AppHeader />
-      <main className="container mx-auto max-w-2xl px-4 py-8">
-        <h1 className="text-2xl font-bold text-text">Alertas</h1>
-        <p className="mt-1 text-sm text-muted">
-          Posibles coincidencias con tus reportes
-        </p>
+    <div className="container mx-auto max-w-3xl px-4 py-8">
+      <h1 className="text-2xl font-bold text-text">Alertas</h1>
+      <p className="mt-1 text-sm text-muted">
+        Posibles coincidencias con tus reportes
+      </p>
 
-        <div className="mt-6 flex flex-col gap-4">
+      {/* Bloque 1: Mapa de Alertas (visual; el mapa real es placeholder) */}
+      <section
+        className="mt-6 rounded-card border border-border bg-card p-6 shadow-card"
+        aria-labelledby="mapa-alertas-title"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="mapa-alertas-title" className="text-lg font-semibold text-text">
+              Mapa de Alertas
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              Visualiza de un vistazo los reportes activos alrededor de tu zona.
+            </p>
+          </div>
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-primary-soft">
+            <MapPin className="h-5 w-5 text-primary" aria-hidden />
+          </span>
+        </div>
+        <Link
+          href="/mapa"
+          className="mt-4 inline-flex text-sm font-medium text-primary hover:underline"
+        >
+          Abrir mapa interactivo →
+        </Link>
+      </section>
+
+      {/* Bloque 2: Tus coincidencias (HU4 — backend real) */}
+      <section className="mt-8" aria-labelledby="tus-coincidencias-title">
+        <h2 id="tus-coincidencias-title" className="text-lg font-semibold text-text">
+          Tus coincidencias
+        </h2>
+        <div className="mt-4 flex flex-col gap-4">
           {alertas === null && (
             <p className="text-sm text-muted">Cargando alertas...</p>
           )}
           {alertas !== null && alertas.length === 0 && (
             <p
-              className="rounded bg-surface px-4 py-6 text-center text-sm text-muted"
+              className="rounded-card bg-surface px-4 py-6 text-center text-sm text-muted"
               data-testid="sin-alertas"
             >
               No tienes alertas por ahora. Publica un reporte y te avisaremos
@@ -119,19 +157,47 @@ export default function AlertasPage(): React.JSX.Element {
             />
           ))}
         </div>
+      </section>
 
-        {error && (
-          <p role="alert" className="mt-4 text-sm font-medium text-destructive">
-            {error}
-          </p>
-        )}
+      {error && (
+        <p role="alert" className="mt-4 text-sm font-medium text-destructive">
+          {error}
+        </p>
+      )}
 
-        <div className="mt-8">
-          <Link href="/" className="text-sm text-primary hover:underline">
-            ← Volver al inicio
-          </Link>
+      {/* Bloque 3: Recientes en tu zona — SOLO MOCK (HU6/HU7 Sprint 2) */}
+      <section className="mt-8" aria-labelledby="recientes-title">
+        <div className="flex items-center gap-2">
+          <h2 id="recientes-title" className="text-lg font-semibold text-text">
+            Recientes en tu zona
+          </h2>
+          <span className="rounded-pill bg-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Vista previa
+          </span>
         </div>
-      </main>
+        <p className="mt-1 text-sm text-muted">
+          Próximamente verás aquí los hallazgos cercanos reportados por la
+          comunidad.
+        </p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {RECIENTES_MOCK.map((item) => (
+            <article
+              key={item.id}
+              className="rounded-card border border-border bg-card p-4 shadow-card"
+              data-testid={`reciente-${item.id}`}
+            >
+              <p className="text-sm font-semibold text-text">{item.especie}</p>
+              <p className="mt-1 text-sm text-muted">{item.color}</p>
+              <p className="mt-2 flex items-center gap-1 text-xs text-muted">
+                <MapPin className="h-3.5 w-3.5" aria-hidden />
+                {item.lugar}
+              </p>
+              <p className="mt-1 text-xs text-muted">{item.tiempo}</p>
+            </article>
+          ))}
+        </div>
+        {/* TODO(Sprint2): conectar este bloque a HU6/HU7 con datos reales del backend. */}
+      </section>
     </div>
   );
 }

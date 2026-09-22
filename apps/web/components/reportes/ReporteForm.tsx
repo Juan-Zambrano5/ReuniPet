@@ -3,8 +3,8 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { TipoReporte } from '@reunipet/shared';
-import { AppHeader } from '@/components/AppHeader';
 import { FormField } from '@/components/FormField';
+import { EspecieSelector } from '@/components/reportes/EspecieSelector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,6 +16,7 @@ import {
 
 interface ReporteFormProps {
   tipo: TipoReporte;
+  submitLabel?: string;
 }
 
 interface FormState {
@@ -51,7 +52,7 @@ function clientValidate(
   return errors;
 }
 
-export function ReporteForm({ tipo }: ReporteFormProps): React.JSX.Element {
+export function ReporteForm({ tipo, submitLabel }: ReporteFormProps): React.JSX.Element {
   const router = useRouter();
   const [form, setForm] = React.useState<FormState>(initialForm);
   const [errors, setErrors] = React.useState<
@@ -61,14 +62,25 @@ export function ReporteForm({ tipo }: ReporteFormProps): React.JSX.Element {
   const [serverError, setServerError] = React.useState<string | null>(null);
 
   const esPerdida = tipo === TipoReporte.PERDIDA;
+  const boton =
+    submitLabel ?? (esPerdida ? 'Siguiente paso' : 'Publicar reporte');
 
   function updateField(field: keyof FormState, value: string): void {
     setForm((prev) => ({ ...prev, [field]: value }));
-    // limpiar error del campo al escribir
     setErrors((prev) => {
       if (!prev[field]) return prev;
       const next = { ...prev };
       delete next[field];
+      return next;
+    });
+  }
+
+  function updateEspecie(value: string): void {
+    setForm((prev) => ({ ...prev, especie: value }));
+    setErrors((prev) => {
+      if (!prev.especie) return prev;
+      const next = { ...prev };
+      delete next.especie;
       return next;
     });
   }
@@ -93,7 +105,11 @@ export function ReporteForm({ tipo }: ReporteFormProps): React.JSX.Element {
         ubicacion:
           tipo === TipoReporte.ENCONTRADA ? form.ubicacion.trim() : undefined,
       });
-      router.push(`/reportes/${reporte.id}/fotos`);
+      if (esPerdida) {
+        router.push(`/reportar/perdida/fotos?id=${reporte.id}`);
+      } else {
+        router.push('/');
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         const fieldErrors = extractFieldErrors(err);
@@ -110,108 +126,91 @@ export function ReporteForm({ tipo }: ReporteFormProps): React.JSX.Element {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <AppHeader />
-      <main className="container mx-auto max-w-xl px-4 py-8">
-        <h1 className="text-2xl font-bold text-text">
-          {esPerdida ? 'Reportar mascota perdida' : 'Reportar mascota encontrada'}
-        </h1>
-        <p className="mt-1 text-sm text-muted">
-          {esPerdida
-            ? 'Completa los datos de tu mascota para que la comunidad pueda ayudarte a encontrarla.'
-            : 'Completa los datos de la mascota que encontraste para avisar a su propietario.'}
+    <form
+      className="flex flex-col gap-4 rounded-card border border-border bg-card p-6 shadow-card"
+      onSubmit={handleSubmit}
+      noValidate
+      data-testid="reporte-form"
+    >
+      <EspecieSelector
+        value={form.especie}
+        onChange={updateEspecie}
+        error={errors.especie}
+      />
+
+      <FormField htmlFor="raza" label="Raza (opcional)" error={errors.raza}>
+        <Input
+          id="raza"
+          name="raza"
+          placeholder="Ej: labrador, mestizo..."
+          value={form.raza}
+          onChange={(e) => updateField('raza', e.target.value)}
+        />
+      </FormField>
+
+      <FormField htmlFor="color" label="Color" error={errors.color}>
+        <Input
+          id="color"
+          name="color"
+          placeholder="Ej: negro con manchas blancas"
+          value={form.color}
+          onChange={(e) => updateField('color', e.target.value)}
+          aria-invalid={errors.color ? true : undefined}
+          aria-describedby={errors.color ? 'color-error' : undefined}
+        />
+      </FormField>
+
+      <FormField
+        htmlFor="caracteristicasDistintivas"
+        label="Características distintivas"
+        error={errors.caracteristicasDistintivas}
+      >
+        <Textarea
+          id="caracteristicasDistintivas"
+          name="caracteristicasDistintivas"
+          placeholder="Ej: collar rojo, oreja izquierda cortada, camina cojeando..."
+          value={form.caracteristicasDistintivas}
+          onChange={(e) =>
+            updateField('caracteristicasDistintivas', e.target.value)
+          }
+          aria-invalid={
+            errors.caracteristicasDistintivas ? true : undefined
+          }
+          aria-describedby={
+            errors.caracteristicasDistintivas
+              ? 'caracteristicasDistintivas-error'
+              : undefined
+          }
+        />
+      </FormField>
+
+      {!esPerdida && (
+        <FormField
+          htmlFor="ubicacion"
+          label="Ubicación"
+          error={errors.ubicacion}
+        >
+          <Input
+            id="ubicacion"
+            name="ubicacion"
+            placeholder="Ej: Av. Principal y Calle 5, cerca del parque"
+            value={form.ubicacion}
+            onChange={(e) => updateField('ubicacion', e.target.value)}
+            aria-invalid={errors.ubicacion ? true : undefined}
+            aria-describedby={errors.ubicacion ? 'ubicacion-error' : undefined}
+          />
+        </FormField>
+      )}
+
+      {serverError && (
+        <p role="alert" className="text-sm font-medium text-destructive">
+          {serverError}
         </p>
+      )}
 
-        <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
-          <FormField
-            htmlFor="especie"
-            label="Especie"
-            error={errors.especie}
-          >
-            <Input
-              id="especie"
-              name="especie"
-              placeholder="Ej: perro, gato..."
-              value={form.especie}
-              onChange={(e) => updateField('especie', e.target.value)}
-              aria-invalid={errors.especie ? true : undefined}
-              aria-describedby={errors.especie ? 'especie-error' : undefined}
-            />
-          </FormField>
-
-          <FormField htmlFor="raza" label="Raza (opcional)" error={errors.raza}>
-            <Input
-              id="raza"
-              name="raza"
-              placeholder="Ej: labrador, mestizo..."
-              value={form.raza}
-              onChange={(e) => updateField('raza', e.target.value)}
-            />
-          </FormField>
-
-          <FormField htmlFor="color" label="Color" error={errors.color}>
-            <Input
-              id="color"
-              name="color"
-              placeholder="Ej: negro con manchas blancas"
-              value={form.color}
-              onChange={(e) => updateField('color', e.target.value)}
-              aria-invalid={errors.color ? true : undefined}
-              aria-describedby={errors.color ? 'color-error' : undefined}
-            />
-          </FormField>
-
-          <FormField
-            htmlFor="caracteristicasDistintivas"
-            label="Características distintivas"
-            error={errors.caracteristicasDistintivas}
-          >
-            <Textarea
-              id="caracteristicasDistintivas"
-              name="caracteristicasDistintivas"
-              placeholder="Ej: collar rojo, oreja izquierda cortada, camina cojeando..."
-              value={form.caracteristicasDistintivas}
-              onChange={(e) =>
-                updateField('caracteristicasDistintivas', e.target.value)
-              }
-              aria-invalid={
-                errors.caracteristicasDistintivas ? true : undefined
-              }
-              aria-describedby={
-                errors.caracteristicasDistintivas
-                  ? 'caracteristicasDistintivas-error'
-                  : undefined
-              }
-            />
-          </FormField>
-
-          {!esPerdida && (
-            <FormField
-              htmlFor="ubicacion"
-              label="Ubicación"
-              error={errors.ubicacion}
-            >
-              <Input
-                id="ubicacion"
-                name="ubicacion"
-                placeholder="Ej: Av. Principal y Calle 5, cerca del parque"
-                value={form.ubicacion}
-                onChange={(e) => updateField('ubicacion', e.target.value)}
-              />
-            </FormField>
-          )}
-
-          {serverError && (
-            <p role="alert" className="text-sm font-medium text-destructive">
-              {serverError}
-            </p>
-          )}
-
-          <Button type="submit" disabled={submitting} className="mt-2 w-full">
-            {submitting ? 'Publicando...' : 'Publicar reporte'}
-          </Button>
-        </form>
-      </main>
-    </div>
+      <Button type="submit" disabled={submitting} className="mt-1 w-full">
+        {submitting ? 'Publicando...' : boton}
+      </Button>
+    </form>
   );
 }
