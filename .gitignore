@@ -9,3 +9,8 @@ coverage/
 prisma/*.db
 *.log
 uploads/
+
+# Documentos internos que no deben versionarse
+AGENTS.md
+DISENO_Y_PROMPTS_SPRINT1.md
+DOCUMENTO_TECNICO.txt
