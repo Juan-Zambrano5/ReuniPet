@@ -7,6 +7,6 @@
     @apply border-border;
   }
   body {
-    @apply bg-white text-text antialiased;
+    @apply bg-bg text-text antialiased;
   }
 }

@@ -16,22 +16,44 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#4F46E5',
-          hover: '#4338CA',
-          soft: '#EEF0FF',
+          DEFAULT: '#5B57E8',
+          hover: '#4A46D1',
+          soft: '#EEF2FF',
           foreground: '#FFFFFF',
         },
+        info: {
+          bg: '#EBF5FF',
+        },
+        success: {
+          DEFAULT: '#1FAE7A',
+          hover: '#189568',
+          bg: '#E7F8F2',
+          'bg-soft': '#F0FDF4',
+          foreground: '#FFFFFF',
+        },
+        danger: {
+          DEFAULT: '#EF4444',
+          foreground: '#FFFFFF',
+        },
+        destructive: '#EF4444',
+        bg: '#F8FAFC',
+        card: '#FFFFFF',
         surface: '#F2F3F5',
         muted: '#6B6B6E',
         border: '#E4E4E7',
         text: '#111111',
-        destructive: '#DC2626',
       },
       borderRadius: {
-        DEFAULT: '12px',
-        lg: '12px',
+        DEFAULT: '10px',
+        card: '16px',
+        control: '10px',
+        pill: '9999px',
+        lg: '10px',
         md: '8px',
         sm: '6px',
+      },
+      boxShadow: {
+        card: '0 1px 3px rgba(0,0,0,0.06)',
       },
       keyframes: {
         'accordion-down': {

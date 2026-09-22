@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AppNavbar } from '@/components/layout/AppNavbar';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -12,7 +13,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>): React.JSX.Element {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        <AppNavbar />
+        <main className="min-h-screen pt-16">{children}</main>
+      </body>
     </html>
   );
 }
