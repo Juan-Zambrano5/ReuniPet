@@ -87,4 +87,49 @@ describe('HU1 — POST /reportes (mascota perdida)', () => {
       })
       .expect(400);
   });
+
+  it('HU3 AC1/AC2: crea un reporte ENCONTRADA con ubicación y estado ENCONTRADA', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/reportes')
+      .send({
+        tipo: 'ENCONTRADA',
+        especie: 'Perro',
+        raza: 'beagle',
+        color: 'blanco y marrón',
+        caracteristicasDistintivas: 'pata delantera cojeando',
+        ubicacion: 'Av. Principal y Calle 5, cerca del parque',
+      })
+      .expect(201);
+
+    expect(res.body).toMatchObject({
+      tipo: 'ENCONTRADA',
+      estado: 'ENCONTRADA',
+      ubicacion: 'Av. Principal y Calle 5, cerca del parque',
+    });
+
+    // AC3: cualquier usuario puede consultar el reporte (sin header de sesión)
+    const detalle = await request(app.getHttpServer())
+      .get(`/reportes/${res.body.id}`)
+      .expect(200);
+    expect(detalle.body).toMatchObject({
+      especie: 'Perro',
+      color: 'blanco y marrón',
+      caracteristicasDistintivas: 'pata delantera cojeando',
+      ubicacion: 'Av. Principal y Calle 5, cerca del parque',
+    });
+  });
+
+  it('HU3 AC2: rechaza un reporte ENCONTRADA sin ubicación', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/reportes')
+      .send({
+        tipo: 'ENCONTRADA',
+        especie: 'Gato',
+        color: 'negro',
+        caracteristicasDistintivas: 'oreja rota',
+      })
+      .expect(400);
+
+    expect(JSON.stringify(res.body).toLowerCase()).toContain('ubicaci');
+  });
 });

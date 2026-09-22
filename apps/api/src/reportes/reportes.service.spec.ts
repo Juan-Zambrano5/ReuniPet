@@ -91,4 +91,64 @@ describe('ReportesService', () => {
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'especie')).toBe(true);
   });
+
+  it('HU3: para tipo ENCONTRADA la ubicación es obligatoria', async () => {
+    const dto = plainToInstance(CreateReporteDto, {
+      tipo: 'ENCONTRADA',
+      especie: 'gato',
+      color: 'blanco',
+      caracteristicasDistintivas: 'sin cola',
+    });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'ubicacion')).toBe(true);
+  });
+
+  it('HU3: para tipo PERDIDA la ubicación sigue siendo opcional', async () => {
+    const dto = plainToInstance(CreateReporteDto, {
+      tipo: 'PERDIDA',
+      especie: 'gato',
+      color: 'blanco',
+      caracteristicasDistintivas: 'sin cola',
+    });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('HU3: crea un reporte ENCONTRADA con estado ENCONTRADA', async () => {
+    const now = new Date();
+    prismaMock.reporte.create.mockResolvedValue({
+      id: 'rep-2',
+      tipo: 'ENCONTRADA',
+      especie: 'gato',
+      raza: null,
+      color: 'blanco',
+      caracteristicasDistintivas: 'sin cola',
+      ubicacion: 'Parque Central',
+      estado: 'ENCONTRADA',
+      propietarioId: user.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const result = await service.create(
+      {
+        tipo: TipoReporte.ENCONTRADA,
+        especie: 'gato',
+        color: 'blanco',
+        caracteristicasDistintivas: 'sin cola',
+        ubicacion: 'Parque Central',
+      },
+      user,
+    );
+
+    expect(prismaMock.reporte.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        tipo: 'ENCONTRADA',
+        estado: 'ENCONTRADA',
+        ubicacion: 'Parque Central',
+      }),
+    });
+    expect(result.estado).toBe('ENCONTRADA');
+    expect(result.ubicacion).toBe('Parque Central');
+  });
 });

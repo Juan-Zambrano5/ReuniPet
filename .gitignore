@@ -8,3 +8,4 @@ coverage/
 .eslintcache
 prisma/*.db
 *.log
+uploads/
