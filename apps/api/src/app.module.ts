@@ -5,6 +5,7 @@ import { StorageModule } from './storage/storage.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
 import { ReportesModule } from './reportes/reportes.module';
 import { MatchingModule } from './matching/matching.module';
+import { AlertasModule } from './alertas/alertas.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { MatchingModule } from './matching/matching.module';
     UsuariosModule,
     ReportesModule,
     MatchingModule,
+    AlertasModule,
   ],
 })
 export class AppModule {}
