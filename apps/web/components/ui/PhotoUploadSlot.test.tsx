@@ -1,9 +1,9 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { PhotoUploadSlot } from '@/components/fotos/PhotoUploadSlot';
+import { PhotoUploadSlot } from '@/components/ui/PhotoUploadSlot';
 
 describe('PhotoUploadSlot (HU2)', () => {
-  it('muestra el estado vacío con el ícono +', () => {
+  it('muestra el estado vacío con ícono de cámara y "Subir más fotos"', () => {
     render(
       <PhotoUploadSlot
         slotId="1"
@@ -13,6 +13,7 @@ describe('PhotoUploadSlot (HU2)', () => {
     );
     expect(screen.getByTestId('slot-1')).toBeInTheDocument();
     expect(screen.getByTestId('input-1')).toBeInTheDocument();
+    expect(screen.getByText(/subir más fotos/i)).toBeInTheDocument();
   });
 
   it('muestra la preview cuando hay URL', () => {
