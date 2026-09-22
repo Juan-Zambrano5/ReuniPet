@@ -6,7 +6,6 @@ const config = {
   testEnvironment: 'jsdom',
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
-    '^@reunipet/shared$': '<rootDir>/../../packages/shared/src/index.ts',
   },
   testMatch: ['**/__tests__/**/*.@(ts|tsx)', '**/*.test.@(ts|tsx)'],
   passWithNoTests: true,

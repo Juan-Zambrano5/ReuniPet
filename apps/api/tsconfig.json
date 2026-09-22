@@ -18,10 +18,7 @@
     "noImplicitAny": true,
     "strictBindCallApply": true,
     "forceConsistentCasingInFileNames": true,
-    "noFallthroughCasesInSwitch": true,
-    "paths": {
-      "@reunipet/shared": ["../../packages/shared/src/index.ts"]
-    }
+    "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "prisma", "test", "../../packages/shared/src"]
+  "include": ["src", "prisma", "test"]
 }
