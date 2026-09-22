@@ -26,7 +26,7 @@ describe('ReportesService', () => {
     matchingMock = { compararReporte: jest.fn().mockResolvedValue(undefined) };
     service = new ReportesService(
       prismaMock as never,
-      matchingMock as MatchingService,
+      matchingMock as unknown as MatchingService,
     );
   });
 
