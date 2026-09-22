@@ -36,6 +36,7 @@ export interface ReporteResponse {
   propietarioId: string;
   createdAt: string;
   updatedAt: string;
+  fotos?: FotografiaResponse[];
 }
 
 export interface FotografiaResponse {

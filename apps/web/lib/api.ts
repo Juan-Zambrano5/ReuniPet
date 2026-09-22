@@ -1,6 +1,7 @@
 import { CreateReporteInput, ReporteResponse, TipoReporte } from '@reunipet/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const API_URL_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+export const API_URL = API_URL_BASE;
 
 export class ApiError extends Error {
   constructor(
@@ -12,7 +13,7 @@ export class ApiError extends Error {
   }
 }
 
-function getSessionHeaders(): Record<string, string> {
+export function getSessionHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {};
   const userId = window.localStorage.getItem('x-user-id');
   return userId ? { 'X-User-Id': userId } : {};
