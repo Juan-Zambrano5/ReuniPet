@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id        String    @id @default(uuid())
+  nombre    String
+  email     String    @unique
+  telefono  String?
+  createdAt DateTime  @default(now())
+  reportes  Reporte[]
+}
+
+enum TipoReporte {
+  PERDIDA
+  ENCONTRADA
+}
+
+enum EstadoReporte {
+  PERDIDA
+  ENCONTRADA
+  RECUPERADA
+}
+
+model Reporte {
+  id                         String        @id @default(uuid())
+  tipo                       TipoReporte
+  especie                    String
+  raza                       String?
+  color                      String
+  caracteristicasDistintivas String?
+  ubicacion                  String?
+  estado                     EstadoReporte
+  propietarioId              String
+  propietario                Usuario       @relation(fields: [propietarioId], references: [id])
+  fotos                      Fotografia[]
+  coincidenciasComoPerdida    Coincidencia[] @relation("ReportePerdida")
+  coincidenciasComoEncontrada Coincidencia[] @relation("ReporteEncontrada")
+  createdAt                  DateTime      @default(now())
+  updatedAt                  DateTime      @updatedAt
+}
+
+model Fotografia {
+  id        String   @id @default(uuid())
+  reporteId String
+  reporte   Reporte  @relation(fields: [reporteId], references: [id], onDelete: Cascade)
+  url       String
+  orden     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+enum EstadoCoincidencia {
+  PENDIENTE
+  VISTA
+  DESCARTADA
+}
+
+model Coincidencia {
+  id                  String            @id @default(uuid())
+  reportePerdidaId    String
+  reporteEncontradaId String
+  reportePerdida      Reporte           @relation("ReportePerdida", fields: [reportePerdidaId], references: [id], onDelete: Cascade)
+  reporteEncontrada   Reporte           @relation("ReporteEncontrada", fields: [reporteEncontradaId], references: [id], onDelete: Cascade)
+  score               Float
+  estado              EstadoCoincidencia @default(PENDIENTE)
+  createdAt           DateTime          @default(now())
+}
