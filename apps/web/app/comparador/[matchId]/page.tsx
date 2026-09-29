@@ -8,10 +8,10 @@ import { MatchScoreCircle } from '@/components/ui/MatchScoreCircle';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
 import {
+  descartarAlerta,
   fotoUrl,
   getAlertas,
   getReporte,
-  marcarVista,
 } from '@/lib/api';
 
 export default function ComparadorPage(): React.JSX.Element {
@@ -68,7 +68,7 @@ export default function ComparadorPage(): React.JSX.Element {
     if (!alerta) return;
     setAccionando(true);
     try {
-      await marcarVista(alerta.coincidenciaId);
+      await descartarAlerta(alerta.coincidenciaId);
       router.push('/alertas');
     } catch {
       setError('No se pudo descartar. Intenta de nuevo.');

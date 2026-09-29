@@ -29,4 +29,9 @@ export class AlertasController {
   async marcarVista(@Param('id') id: string): Promise<AlertaResponse> {
     return this.alertasService.marcarVista(id);
   }
+
+  @Patch('alertas/:id/descartar')
+  async descartar(@Param('id') id: string): Promise<AlertaResponse> {
+    return this.alertasService.descartar(id);
+  }
 }

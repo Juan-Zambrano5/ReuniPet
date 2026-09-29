@@ -123,4 +123,45 @@ describe('HU4 — Alertas de coincidencia', () => {
       .patch('/alertas/no-existe/visto')
       .expect(404);
   });
+
+  it('PATCH /alertas/:id/descartar elimina la alerta de la lista y no vuelve a aparecer', async () => {
+    const list = await request(app.getHttpServer())
+      .get('/usuarios/me/alertas')
+      .expect(200);
+    expect(list.body.length).toBeGreaterThan(0);
+    const id = list.body[0].coincidenciaId;
+
+    const res = await request(app.getHttpServer())
+      .patch(`/alertas/${id}/descartar`)
+      .expect(200);
+    expect(res.body.estado).toBe('DESCARTADA');
+
+    const trasDescartar = await request(app.getHttpServer())
+      .get('/usuarios/me/alertas')
+      .expect(200);
+    expect(
+      trasDescartar.body.some(
+        (a: { coincidenciaId: string }) => a.coincidenciaId === id,
+      ),
+    ).toBe(false);
+
+    // reintentar descartar la misma sigue siendo 200 y sigue fuera de la lista
+    await request(app.getHttpServer())
+      .patch(`/alertas/${id}/descartar`)
+      .expect(200);
+    const alRecargar = await request(app.getHttpServer())
+      .get('/usuarios/me/alertas')
+      .expect(200);
+    expect(
+      alRecargar.body.some(
+        (a: { coincidenciaId: string }) => a.coincidenciaId === id,
+      ),
+    ).toBe(false);
+  });
+
+  it('devuelve 404 al descartar una alerta inexistente', async () => {
+    await request(app.getHttpServer())
+      .patch('/alertas/no-existe/descartar')
+      .expect(404);
+  });
 });

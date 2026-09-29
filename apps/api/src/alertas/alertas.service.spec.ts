@@ -87,4 +87,29 @@ describe('AlertasService (HU4)', () => {
       NotFoundException,
     );
   });
+
+  it('descartar cambia el estado a DESCARTADA', async () => {
+    prismaMock.coincidencia.findUnique.mockResolvedValue(baseCoincidencia);
+    prismaMock.coincidencia.update.mockResolvedValue({
+      ...baseCoincidencia,
+      estado: 'DESCARTADA',
+    });
+
+    const result = await service.descartar('coin-1');
+
+    expect(prismaMock.coincidencia.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'coin-1' },
+        data: { estado: 'DESCARTADA' },
+      }),
+    );
+    expect(result.estado).toBe('DESCARTADA');
+  });
+
+  it('descartar lanza 404 si la alerta no existe', async () => {
+    prismaMock.coincidencia.findUnique.mockResolvedValue(null);
+    await expect(service.descartar('no-existe')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
 });

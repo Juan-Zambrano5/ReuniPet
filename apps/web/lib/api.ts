@@ -71,6 +71,14 @@ export async function marcarVista(coincidenciaId: string): Promise<void> {
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
 }
 
+export async function descartarAlerta(coincidenciaId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/alertas/${coincidenciaId}/descartar`, {
+    method: 'PATCH',
+    headers: getSessionHeaders(),
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
+}
+
 export function fotoUrl(url: string): string {
   return url.startsWith('http') ? url : `${API_URL}${url}`;
 }

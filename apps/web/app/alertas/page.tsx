@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AlertaResponse } from '@reunipet/shared';
 import { AlertCard } from '@/components/alertas/AlertCard';
 import { MapPin } from 'lucide-react';
-import { getAlertas, marcarVista } from '@/lib/api';
+import { descartarAlerta, getAlertas } from '@/lib/api';
 
 // TODO(Sprint2): "Recientes en tu zona" debe conectarse a HU6/HU7 (feed de
 // hallazgos cercanos con geolocalización). Por ahora son datos mock.
@@ -76,7 +76,7 @@ export default function AlertasPage(): React.JSX.Element {
   async function handleDescartar(coincidenciaId: string): Promise<void> {
     setDescartandoId(coincidenciaId);
     try {
-      await marcarVista(coincidenciaId);
+      await descartarAlerta(coincidenciaId);
       setAlertas((prev) =>
         (prev ?? []).filter((a) => a.coincidenciaId !== coincidenciaId),
       );
