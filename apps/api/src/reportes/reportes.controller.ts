@@ -17,6 +17,7 @@ import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Request } from 'express';
 import {
+  ContactoPropietarioResponse,
   FotografiaResponse,
   ListReportesResponse,
   ReporteResponse,
@@ -75,6 +76,16 @@ export class ReportesController {
   ): Promise<ListReportesResponse> {
     const user = await this.currentUser.getUser(req);
     return this.reportesService.list(dto, user);
+  }
+
+  // HU10: contacto del propietario + registro de trazabilidad.
+  @Get(':id/contacto')
+  async getContacto(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<ContactoPropietarioResponse> {
+    const user = await this.currentUser.getUser(req);
+    return this.reportesService.getContacto(id, user);
   }
 
   @Get(':id')

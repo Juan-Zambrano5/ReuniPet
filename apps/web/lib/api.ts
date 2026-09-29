@@ -1,5 +1,6 @@
 import {
   AlertaResponse,
+  ContactoPropietarioResponse,
   CreateReporteInput,
   ListReportesResponse,
   ReporteResponse,
@@ -53,6 +54,20 @@ export async function getReporte(id: string): Promise<ReporteResponse> {
     throw new ApiError(res.status, await res.json().catch(() => ({})));
   }
   return (await res.json()) as ReporteResponse;
+}
+
+// HU10: nombre + medio de contacto del propietario de un reporte.
+export async function getContacto(
+  id: string,
+): Promise<ContactoPropietarioResponse> {
+  const res = await fetch(`${API_URL}/reportes/${id}/contacto`, {
+    headers: getSessionHeaders(),
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.json().catch(() => ({})));
+  }
+  return (await res.json()) as ContactoPropietarioResponse;
 }
 
 // HU8: filtros opcionales de GET /reportes (todos combinables con AND).

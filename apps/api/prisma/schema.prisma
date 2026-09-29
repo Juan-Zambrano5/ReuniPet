@@ -14,6 +14,7 @@ model Usuario {
   telefono  String?
   createdAt DateTime  @default(now())
   reportes  Reporte[]
+  contactosSolicitados ContactoSolicitud[] @relation("ContactoSolicitante")
 }
 
 enum TipoReporte {
@@ -43,8 +44,21 @@ model Reporte {
   fotos                      Fotografia[]
   coincidenciasComoPerdida    Coincidencia[] @relation("ReportePerdida")
   coincidenciasComoEncontrada Coincidencia[] @relation("ReporteEncontrada")
+  contactos                  ContactoSolicitud[]
   createdAt                  DateTime      @default(now())
   updatedAt                  DateTime      @updatedAt
+}
+
+// HU10 AC2: trazabilidad de quién solicitó el contacto de un reporte.
+model ContactoSolicitud {
+  id            String   @id @default(uuid())
+  reporteId     String
+  reporte       Reporte  @relation(fields: [reporteId], references: [id], onDelete: Cascade)
+  solicitanteId String
+  solicitante   Usuario  @relation("ContactoSolicitante", fields: [solicitanteId], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([reporteId])
 }
 
 model Fotografia {

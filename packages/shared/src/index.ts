@@ -114,3 +114,11 @@ export interface AlertaResponse {
 }
 
 export const MATCH_THRESHOLD = 0.7;
+
+// HU10: datos de contacto del propietario de un reporte.
+export interface ContactoPropietarioResponse {
+  reporteId: string;
+  nombre: string;
+  email: string;
+  telefono: string | null;
+}

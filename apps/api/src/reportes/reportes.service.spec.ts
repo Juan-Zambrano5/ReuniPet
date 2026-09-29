@@ -24,6 +24,7 @@ describe('ReportesService', () => {
       findUnique: jest.Mock;
       update: jest.Mock;
     };
+    contactoSolicitud: { create: jest.Mock };
   };
   let matchingMock: { compararReporte: jest.Mock };
 
@@ -35,6 +36,9 @@ describe('ReportesService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
+      },
+      contactoSolicitud: {
+        create: jest.fn(),
       },
     };
     matchingMock = { compararReporte: jest.fn().mockResolvedValue(undefined) };
@@ -697,6 +701,69 @@ describe('ReportesService', () => {
         where: { id: 'rep-9' },
         data: { latitud: 11, longitud: -67 },
       });
+    });
+  });
+
+  describe('HU10 — información de contacto', () => {
+    const propietario = {
+      id: 'dueno-1',
+      nombre: 'María Pérez',
+      email: 'maria@test.dev',
+      telefono: '04121234567',
+      createdAt: new Date('2026-09-28T12:00:00.000Z'),
+    };
+
+    it('AC1: devuelve nombre y medio de contacto del propietario', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        id: 'rep-9',
+        propietario,
+      });
+      prismaMock.contactoSolicitud.create.mockResolvedValue({});
+
+      const result = await service.getContacto('rep-9', user);
+
+      expect(result).toEqual({
+        reporteId: 'rep-9',
+        nombre: 'María Pérez',
+        email: 'maria@test.dev',
+        telefono: '04121234567',
+      });
+    });
+
+    it('AC2: registra quién solicitó el contacto y de qué reporte', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        id: 'rep-9',
+        propietario,
+      });
+      prismaMock.contactoSolicitud.create.mockResolvedValue({});
+
+      await service.getContacto('rep-9', user);
+
+      expect(prismaMock.contactoSolicitud.create).toHaveBeenCalledWith({
+        data: { reporteId: 'rep-9', solicitanteId: user.id },
+      });
+    });
+
+    it('reporte inexistente → 404 y no se registra la solicitud', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(null);
+
+      await expect(service.getContacto('no-existe', user)).rejects.toThrow(
+        'Reporte no encontrado',
+      );
+      expect(prismaMock.contactoSolicitud.create).not.toHaveBeenCalled();
+    });
+
+    it('HU10: propietario sin teléfono devuelve telefono null', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        id: 'rep-9',
+        propietario: { ...propietario, telefono: null },
+      });
+      prismaMock.contactoSolicitud.create.mockResolvedValue({});
+
+      const result = await service.getContacto('rep-9', user);
+
+      expect(result.telefono).toBeNull();
+      expect(result.email).toBe('maria@test.dev');
     });
   });
 });

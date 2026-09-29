@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { EstadoReporte, Fotografia, Prisma, Reporte, Usuario } from '@prisma/client';
 import {
+  ContactoPropietarioResponse,
   EstadoReporte as SharedEstadoReporte,
   FotografiaResponse,
   ListReportesResponse,
@@ -102,6 +103,34 @@ export class ReportesService {
     });
 
     return this.toResponse(actualizado, user.id);
+  }
+
+  /**
+   * HU10 AC1/AC2: nombre + medio de contacto del propietario del reporte.
+   * Cada solicitud queda registrada (quién la pidió y cuándo).
+   */
+  async getContacto(
+    id: string,
+    solicitante: Usuario,
+  ): Promise<ContactoPropietarioResponse> {
+    const reporte = await this.prisma.reporte.findUnique({
+      where: { id },
+      select: { id: true, propietario: true },
+    });
+    if (!reporte) {
+      throw new NotFoundException('Reporte no encontrado');
+    }
+
+    await this.prisma.contactoSolicitud.create({
+      data: { reporteId: reporte.id, solicitanteId: solicitante.id },
+    });
+
+    return {
+      reporteId: reporte.id,
+      nombre: reporte.propietario.nombre,
+      email: reporte.propietario.email,
+      telefono: reporte.propietario.telefono,
+    };
   }
 
   async list(

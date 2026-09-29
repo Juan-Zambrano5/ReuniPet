@@ -2,7 +2,11 @@
 
 import * as React from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { AlertaResponse, ReporteResponse } from '@reunipet/shared';
+import {
+  AlertaResponse,
+  ContactoPropietarioResponse,
+  ReporteResponse,
+} from '@reunipet/shared';
 import { ErrorText } from '@/components/ErrorText';
 import { MatchScoreCircle } from '@/components/ui/MatchScoreCircle';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -11,6 +15,7 @@ import {
   descartarAlerta,
   fotoUrl,
   getAlertas,
+  getContacto,
   getReporte,
 } from '@/lib/api';
 
@@ -27,7 +32,13 @@ export default function ComparadorPage(): React.JSX.Element {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [accionando, setAccionando] = React.useState(false);
-  const [contactoNota, setContactoNota] = React.useState(false);
+  // HU10: datos de contacto del reportante (quien halló la mascota).
+  const [contacto, setContacto] =
+    React.useState<ContactoPropietarioResponse | null>(null);
+  const [cargandoContacto, setCargandoContacto] = React.useState(false);
+  const [contactoError, setContactoError] = React.useState<string | null>(
+    null,
+  );
 
   React.useEffect(() => {
     let cancelado = false;
@@ -73,6 +84,21 @@ export default function ComparadorPage(): React.JSX.Element {
     } catch {
       setError('No se pudo descartar. Intenta de nuevo.');
       setAccionando(false);
+    }
+  }
+
+  // HU10 AC1: pide al backend el contacto del dueño del reporte de hallazgo.
+  async function handleContactar(): Promise<void> {
+    if (!reporteEncontrada || cargandoContacto) return;
+    setCargandoContacto(true);
+    setContactoError(null);
+    try {
+      const datos = await getContacto(reporteEncontrada.id);
+      setContacto(datos);
+    } catch {
+      setContactoError('No se pudo obtener el contacto. Intenta de nuevo.');
+    } finally {
+      setCargandoContacto(false);
     }
   }
 
@@ -217,9 +243,11 @@ export default function ComparadorPage(): React.JSX.Element {
           <Button
             type="button"
             className="bg-success hover:bg-success-hover sm:flex-1"
-            onClick={() => setContactoNota(true)}
+            onClick={handleContactar}
+            disabled={cargandoContacto}
+            data-testid="boton-contactar"
           >
-            Contactar
+            {cargandoContacto ? 'Obteniendo contacto...' : 'Contactar'}
           </Button>
           <Button
             type="button"
@@ -231,11 +259,43 @@ export default function ComparadorPage(): React.JSX.Element {
             {accionando ? 'Descartando...' : 'Descartar'}
           </Button>
         </div>
-        {contactoNota && (
-          <p className="mt-3 text-sm text-muted" role="status">
-            Los datos de contacto estarán disponibles próximamente. Por ahora,
-            descartar la alerta notifica al equipo de ReuniPet.
-          </p>
+        {contacto && (
+          <div
+            className="mt-3 rounded-control border border-border bg-card p-4"
+            role="status"
+            data-testid="contacto-panel"
+          >
+            <p className="text-sm font-semibold text-text">
+              Contacto de {contacto.nombre}
+            </p>
+            <p className="mt-1 text-sm text-text">
+              <a
+                href={`mailto:${contacto.email}`}
+                className="text-primary underline"
+              >
+                {contacto.email}
+              </a>
+            </p>
+            {contacto.telefono && (
+              <p className="text-sm text-text">
+                <a
+                  href={`tel:${contacto.telefono}`}
+                  className="text-primary underline"
+                >
+                  {contacto.telefono}
+                </a>
+              </p>
+            )}
+            <p className="mt-1 text-xs text-muted">
+              Mencionaste ReuniPet al contactar. Esta solicitud queda registrada
+              para trazabilidad.
+            </p>
+          </div>
+        )}
+        {contactoError && (
+          <div className="mt-3">
+            <ErrorText>{contactoError}</ErrorText>
+          </div>
         )}
         {error && (
           <div className="mt-3">
