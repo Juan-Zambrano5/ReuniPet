@@ -1,6 +1,7 @@
 import {
   AlertaResponse,
   CreateReporteInput,
+  ListReportesResponse,
   ReporteResponse,
   TipoReporte,
 } from '@reunipet/shared';
@@ -52,6 +53,22 @@ export async function getReporte(id: string): Promise<ReporteResponse> {
     throw new ApiError(res.status, await res.json().catch(() => ({})));
   }
   return (await res.json()) as ReporteResponse;
+}
+
+export async function getReportes(
+  params: { tipo?: TipoReporte; page?: number; limit?: number } = {},
+): Promise<ListReportesResponse> {
+  const qs = new URLSearchParams();
+  if (params.tipo) qs.set('tipo', params.tipo);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.limit) qs.set('limit', String(params.limit));
+  const query = qs.toString();
+  const res = await fetch(`${API_URL}/reportes${query ? `?${query}` : ''}`, {
+    headers: getSessionHeaders(),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
+  return (await res.json()) as ListReportesResponse;
 }
 
 export async function getAlertas(): Promise<AlertaResponse[]> {

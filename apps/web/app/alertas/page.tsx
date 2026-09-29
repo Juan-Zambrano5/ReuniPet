@@ -3,47 +3,12 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertaResponse } from '@reunipet/shared';
+import { AlertaResponse, TipoReporte } from '@reunipet/shared';
 import { AlertCard } from '@/components/alertas/AlertCard';
+import { RecientesZona } from '@/components/alertas/RecientesZona';
 import { MapPin } from 'lucide-react';
 import { descartarAlerta, getAlertas } from '@/lib/api';
-
-// TODO(Sprint2): "Recientes en tu zona" debe conectarse a HU6/HU7 (feed de
-// hallazgos cercanos con geolocalización). Por ahora son datos mock.
-const RECIENTES_MOCK = [
-  {
-    id: 'mock-1',
-    especie: 'Perro mestizo',
-    color: 'Blanco con manchas negras',
-    lugar: 'Plaza del Sol',
-    tiempo: 'hace 2 horas',
-  },
-  {
-    id: 'mock-2',
-    especie: 'Gato naranja',
-    color: 'Naranja atigrado',
-    lugar: 'Calle 12 con Av. Central',
-    tiempo: 'hace 5 horas',
-  },
-  {
-    id: 'mock-3',
-    especie: 'Perro labrador',
-    color: 'Dorado',
-    lugar: 'Parque Municipal',
-    tiempo: 'ayer',
-  },
-];
-
-function tiempoRelativo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'hace instantes';
-  if (mins < 60) return `hace ${mins} minuto(s)`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `hace ${hours} hora(s)`;
-  const days = Math.floor(hours / 24);
-  return `hace ${days} día(s)`;
-}
+import { tiempoRelativo } from '@/lib/tiempo';
 
 function descripcion(alerta: AlertaResponse): string {
   const perdida = alerta.reportePerdida;
@@ -165,38 +130,17 @@ export default function AlertasPage(): React.JSX.Element {
         </p>
       )}
 
-      {/* Bloque 3: Recientes en tu zona — SOLO MOCK (HU6/HU7 Sprint 2) */}
+      {/* Bloque 3: Recientes en tu zona — HU6 (reportes perdidos reales) */}
       <section className="mt-8" aria-labelledby="recientes-title">
         <div className="flex items-center gap-2">
           <h2 id="recientes-title" className="text-lg font-semibold text-text">
             Recientes en tu zona
           </h2>
-          <span className="rounded-pill bg-surface px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Vista previa
-          </span>
         </div>
         <p className="mt-1 text-sm text-muted">
-          Próximamente verás aquí los hallazgos cercanos reportados por la
-          comunidad.
+          Últimos reportes de mascotas perdidas publicados por la comunidad.
         </p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {RECIENTES_MOCK.map((item) => (
-            <article
-              key={item.id}
-              className="rounded-card border border-border bg-card p-4 shadow-card"
-              data-testid={`reciente-${item.id}`}
-            >
-              <p className="text-sm font-semibold text-text">{item.especie}</p>
-              <p className="mt-1 text-sm text-muted">{item.color}</p>
-              <p className="mt-2 flex items-center gap-1 text-xs text-muted">
-                <MapPin className="h-3.5 w-3.5" aria-hidden />
-                {item.lugar}
-              </p>
-              <p className="mt-1 text-xs text-muted">{item.tiempo}</p>
-            </article>
-          ))}
-        </div>
-        {/* TODO(Sprint2): conectar este bloque a HU6/HU7 con datos reales del backend. */}
+        <RecientesZona tipo={TipoReporte.PERDIDA} />
       </section>
     </div>
   );

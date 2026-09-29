@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Query,
   Req,
   UploadedFiles,
   UseFilters,
@@ -14,10 +15,15 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Request } from 'express';
-import { FotografiaResponse, ReporteResponse } from '@reunipet/shared';
+import {
+  FotografiaResponse,
+  ListReportesResponse,
+  ReporteResponse,
+} from '@reunipet/shared';
 import { CurrentUserProvider } from '../usuarios/current-user.provider';
 import { MulterExceptionFilter } from '../common/multer-exception.filter';
 import { CreateReporteDto } from './dto/create-reporte.dto';
+import { ListReportesDto } from './dto/list-reportes.dto';
 import { FotosService } from './fotos.service';
 import { ReportesService } from './reportes.service';
 
@@ -58,6 +64,15 @@ export class ReportesController {
       orden: f.orden,
       createdAt: f.createdAt.toISOString(),
     }));
+  }
+
+  @Get()
+  async list(
+    @Query() dto: ListReportesDto,
+    @Req() req: Request,
+  ): Promise<ListReportesResponse> {
+    const user = await this.currentUser.getUser(req);
+    return this.reportesService.list(dto, user);
   }
 
   @Get(':id')

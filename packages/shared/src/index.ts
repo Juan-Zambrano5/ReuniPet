@@ -47,6 +47,35 @@ export interface FotografiaResponse {
   createdAt: string;
 }
 
+export interface ReporteListItem {
+  id: string;
+  tipo: TipoReporte;
+  especie: string;
+  raza: string | null;
+  color: string;
+  caracteristicasDistintivas: string;
+  estado: EstadoReporte;
+  ubicacion: string | null;
+  latitud: number | null;
+  longitud: number | null;
+  esPropietario: boolean;
+  fotoPrincipal: FotografiaResponse | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListReportesMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ListReportesResponse {
+  items: ReporteListItem[];
+  meta: ListReportesMeta;
+}
+
 export interface CoincidenciaResponse {
   id: string;
   reportePerdidaId: string;

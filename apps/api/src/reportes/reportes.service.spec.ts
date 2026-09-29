@@ -16,12 +16,22 @@ const user: Usuario = {
 
 describe('ReportesService', () => {
   let service: ReportesService;
-  let prismaMock: { reporte: { create: jest.Mock } };
+  let prismaMock: {
+    reporte: {
+      create: jest.Mock;
+      count: jest.Mock;
+      findMany: jest.Mock;
+    };
+  };
   let matchingMock: { compararReporte: jest.Mock };
 
   beforeEach(() => {
     prismaMock = {
-      reporte: { create: jest.fn() },
+      reporte: {
+        create: jest.fn(),
+        count: jest.fn(),
+        findMany: jest.fn(),
+      },
     };
     matchingMock = { compararReporte: jest.fn().mockResolvedValue(undefined) };
     service = new ReportesService(
@@ -150,5 +160,123 @@ describe('ReportesService', () => {
     });
     expect(result.estado).toBe('ENCONTRADA');
     expect(result.ubicacion).toBe('Parque Central');
+  });
+
+  describe('list (HU6)', () => {
+    const now = new Date('2026-09-28T12:00:00.000Z');
+
+    const reporteAjeno = {
+      id: 'rep-1',
+      tipo: 'PERDIDA',
+      especie: 'Perro',
+      raza: 'Labrador',
+      color: 'negro',
+      caracteristicasDistintivas: 'collar rojo',
+      ubicacion: 'Parque Central',
+      latitud: 10.12345,
+      longitud: -66.98765,
+      estado: 'PERDIDA',
+      propietarioId: 'user-otro',
+      createdAt: now,
+      updatedAt: now,
+      fotos: [
+        {
+          id: 'f-1',
+          reporteId: 'rep-1',
+          url: '/files/perro.jpg',
+          orden: 0,
+          createdAt: now,
+        },
+      ],
+    };
+
+    it('AC1: lista los reportes PERDIDA con foto principal, especie, raza y fecha', async () => {
+      prismaMock.reporte.count.mockResolvedValue(1);
+      prismaMock.reporte.findMany.mockResolvedValue([reporteAjeno]);
+
+      const result = await service.list({}, user);
+
+      expect(prismaMock.reporte.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tipo: 'PERDIDA', estado: { not: 'RECUPERADA' } },
+          orderBy: { createdAt: 'desc' },
+        }),
+      );
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      });
+      const item = result.items[0];
+      expect(item).toMatchObject({
+        id: 'rep-1',
+        tipo: 'PERDIDA',
+        especie: 'Perro',
+        raza: 'Labrador',
+        color: 'negro',
+        estado: 'PERDIDA',
+        ubicacion: 'Parque Central',
+        esPropietario: false,
+      });
+      expect(item.fotoPrincipal).toMatchObject({ url: '/files/perro.jpg' });
+      expect(item.createdAt).toBe(now.toISOString());
+    });
+
+    it('AC3/HU9: a un usuario que no es el propietario le sirve la ubicación aproximada', async () => {
+      prismaMock.reporte.count.mockResolvedValue(1);
+      prismaMock.reporte.findMany.mockResolvedValue([reporteAjeno]);
+
+      const result = await service.list({}, user);
+
+      // ~1km: 10.12345 → 10.12, -66.98765 → -66.99
+      expect(result.items[0].latitud).toBe(10.12);
+      expect(result.items[0].longitud).toBe(-66.99);
+      expect(result.items[0].esPropietario).toBe(false);
+    });
+
+    it('al propietario le sirve la ubicación exacta', async () => {
+      prismaMock.reporte.count.mockResolvedValue(1);
+      prismaMock.reporte.findMany.mockResolvedValue([
+        { ...reporteAjeno, propietarioId: user.id },
+      ]);
+
+      const result = await service.list({}, user);
+
+      expect(result.items[0].latitud).toBe(10.12345);
+      expect(result.items[0].longitud).toBe(-66.98765);
+      expect(result.items[0].esPropietario).toBe(true);
+    });
+
+    it('AC2: sin reportes devuelve items vacío y total 0', async () => {
+      prismaMock.reporte.count.mockResolvedValue(0);
+      prismaMock.reporte.findMany.mockResolvedValue([]);
+
+      const result = await service.list({}, user);
+
+      expect(result.items).toEqual([]);
+      expect(result.meta.total).toBe(0);
+      expect(result.meta.totalPages).toBe(0);
+    });
+
+    it('aplica paginación con page/limit y los refleja en meta', async () => {
+      prismaMock.reporte.count.mockResolvedValue(7);
+      prismaMock.reporte.findMany.mockResolvedValue([reporteAjeno]);
+
+      const result = await service.list(
+        { tipo: TipoReporte.PERDIDA, page: 2, limit: 5 },
+        user,
+      );
+
+      expect(prismaMock.reporte.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 5, take: 5 }),
+      );
+      expect(result.meta).toEqual({
+        page: 2,
+        limit: 5,
+        total: 7,
+        totalPages: 2,
+      });
+    });
   });
 });
