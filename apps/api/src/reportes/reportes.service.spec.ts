@@ -21,6 +21,8 @@ describe('ReportesService', () => {
       create: jest.Mock;
       count: jest.Mock;
       findMany: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
     };
   };
   let matchingMock: { compararReporte: jest.Mock };
@@ -31,6 +33,8 @@ describe('ReportesService', () => {
         create: jest.fn(),
         count: jest.fn(),
         findMany: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
       },
     };
     matchingMock = { compararReporte: jest.fn().mockResolvedValue(undefined) };
@@ -503,6 +507,196 @@ describe('ReportesService', () => {
         'rep-perro-negro',
         'rep-gato-negro',
       ]);
+    });
+  });
+
+  describe('HU9 — ubicación (coordenadas)', () => {
+    const now = new Date('2026-09-28T12:00:00.000Z');
+    const reporteBase = {
+      id: 'rep-9',
+      tipo: 'PERDIDA',
+      especie: 'Perro',
+      raza: null,
+      color: 'negro',
+      caracteristicasDistintivas: 'collar',
+      ubicacion: 'Parque Central',
+      latitud: 10.12345,
+      longitud: -66.98765,
+      estado: 'PERDIDA',
+      propietarioId: user.id,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    it('AC2: create guarda latitud/longitud cuando vienen en par', async () => {
+      prismaMock.reporte.create.mockResolvedValue({
+        ...reporteBase,
+        fotos: [],
+      });
+
+      const result = await service.create(
+        {
+          tipo: TipoReporte.PERDIDA,
+          especie: 'Perro',
+          color: 'negro',
+          caracteristicasDistintivas: 'collar',
+          latitud: 10.12345,
+          longitud: -66.98765,
+        },
+        user,
+      );
+
+      expect(prismaMock.reporte.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          latitud: 10.12345,
+          longitud: -66.98765,
+        }),
+      });
+      // Quien crea es el propietario: ve sus coordenadas exactas.
+      expect(result.latitud).toBe(10.12345);
+      expect(result.longitud).toBe(-66.98765);
+      expect(result.esPropietario).toBe(true);
+    });
+
+    it('AC2: create rechaza latitud sin longitud (las dos van en par)', async () => {
+      await expect(
+        service.create(
+          {
+            tipo: TipoReporte.PERDIDA,
+            especie: 'Perro',
+            color: 'negro',
+            caracteristicasDistintivas: 'collar',
+            latitud: 10,
+          },
+          user,
+        ),
+      ).rejects.toThrow('latitud y longitud deben enviarse juntas');
+      expect(prismaMock.reporte.create).not.toHaveBeenCalled();
+    });
+
+    it('HU9: el DTO de creación valida rangos de latitud y longitud', async () => {
+      const dto = plainToInstance(CreateReporteDto, {
+        tipo: 'PERDIDA',
+        especie: 'Perro',
+        color: 'negro',
+        caracteristicasDistintivas: 'collar',
+        latitud: 100,
+        longitud: -66,
+      });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'latitud')).toBe(true);
+
+      const dtoLng = plainToInstance(CreateReporteDto, {
+        tipo: 'PERDIDA',
+        especie: 'Perro',
+        color: 'negro',
+        caracteristicasDistintivas: 'collar',
+        latitud: 10,
+        longitud: -200,
+      });
+      const errorsLng = await validate(dtoLng);
+      expect(errorsLng.some((e) => e.property === 'longitud')).toBe(true);
+    });
+
+    it('AC3: findById entrega coordenadas exactas al propietario', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        ...reporteBase,
+        fotos: [],
+      });
+
+      const result = await service.findById('rep-9', user.id);
+
+      expect(result?.latitud).toBe(10.12345);
+      expect(result?.longitud).toBe(-66.98765);
+      expect(result?.esPropietario).toBe(true);
+    });
+
+    it('AC3: findById aproxima las coordenadas para un tercero', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        ...reporteBase,
+        fotos: [],
+      });
+
+      const result = await service.findById('rep-9', 'otro-usuario');
+
+      expect(result?.latitud).toBe(10.12);
+      expect(result?.longitud).toBe(-66.99);
+      expect(result?.esPropietario).toBe(false);
+    });
+
+    it('findById devuelve null cuando el reporte no existe', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(null);
+      expect(await service.findById('no-existe', user.id)).toBeNull();
+    });
+
+    it('HU9: updateUbicacion responde 404 si el reporte no existe', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateUbicacion('no-existe', { latitud: 10, longitud: -66 }, user),
+      ).rejects.toThrow('Reporte no encontrado');
+      expect(prismaMock.reporte.update).not.toHaveBeenCalled();
+    });
+
+    it('HU9: updateUbicacion prohíbe actualizar el reporte de otro usuario', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        ...reporteBase,
+        propietarioId: 'dueno-real',
+      });
+
+      await expect(
+        service.updateUbicacion('rep-9', { latitud: 10, longitud: -66 }, user),
+      ).rejects.toThrow('Solo el propietario puede actualizar la ubicación');
+      expect(prismaMock.reporte.update).not.toHaveBeenCalled();
+    });
+
+    it('HU9: el propietario actualiza lat/long y opcionalmente el texto', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(reporteBase);
+      prismaMock.reporte.update.mockResolvedValue({
+        ...reporteBase,
+        latitud: 10.5,
+        longitud: -66.4,
+        ubicacion: 'Calle 5 con Av. Central',
+      });
+
+      const result = await service.updateUbicacion(
+        'rep-9',
+        { latitud: 10.5, longitud: -66.4, ubicacion: 'Calle 5 con Av. Central' },
+        user,
+      );
+
+      expect(prismaMock.reporte.update).toHaveBeenCalledWith({
+        where: { id: 'rep-9' },
+        data: {
+          latitud: 10.5,
+          longitud: -66.4,
+          ubicacion: 'Calle 5 con Av. Central',
+        },
+      });
+      expect(result.latitud).toBe(10.5);
+      expect(result.longitud).toBe(-66.4);
+      expect(result.ubicacion).toBe('Calle 5 con Av. Central');
+      expect(result.esPropietario).toBe(true);
+    });
+
+    it('HU9: sin texto en el DTO no se modifica el campo de referencia', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(reporteBase);
+      prismaMock.reporte.update.mockResolvedValue({
+        ...reporteBase,
+        latitud: 11,
+        longitud: -67,
+      });
+
+      await service.updateUbicacion(
+        'rep-9',
+        { latitud: 11, longitud: -67 },
+        user,
+      );
+
+      expect(prismaMock.reporte.update).toHaveBeenCalledWith({
+        where: { id: 'rep-9' },
+        data: { latitud: 11, longitud: -67 },
+      });
     });
   });
 });

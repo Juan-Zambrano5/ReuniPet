@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { TipoReporte } from '@reunipet/shared';
 import { FormField } from '@/components/FormField';
 import { EspecieSelector } from '@/components/reportes/EspecieSelector';
+import type { PuntoMapa } from '@/components/reportes/MapaSelector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,6 +18,8 @@ import {
 interface ReporteFormProps {
   tipo: TipoReporte;
   submitLabel?: string;
+  /** HU9: punto marcado en el mapa; se envía como latitud/longitud. */
+  punto?: PuntoMapa | null;
 }
 
 interface FormState {
@@ -38,6 +41,7 @@ const initialForm: FormState = {
 function clientValidate(
   form: FormState,
   tipo: TipoReporte,
+  punto: PuntoMapa | null,
 ): Partial<Record<keyof FormState, string>> {
   const errors: Partial<Record<keyof FormState, string>> = {};
   if (!form.especie.trim()) errors.especie = 'La especie es obligatoria';
@@ -46,13 +50,18 @@ function clientValidate(
     errors.caracteristicasDistintivas =
       'Las características distintivas son obligatorias';
   }
-  if (tipo === TipoReporte.ENCONTRADA && !form.ubicacion.trim()) {
-    errors.ubicacion = 'La ubicación es obligatoria';
+  // HU9 AC1: en ENCONTRADA basta con la dirección escrita o el punto en el mapa.
+  if (tipo === TipoReporte.ENCONTRADA && !form.ubicacion.trim() && !punto) {
+    errors.ubicacion = 'Indica la ubicación con texto o marca un punto en el mapa';
   }
   return errors;
 }
 
-export function ReporteForm({ tipo, submitLabel }: ReporteFormProps): React.JSX.Element {
+export function ReporteForm({
+  tipo,
+  submitLabel,
+  punto,
+}: ReporteFormProps): React.JSX.Element {
   const router = useRouter();
   const [form, setForm] = React.useState<FormState>(initialForm);
   const [errors, setErrors] = React.useState<
@@ -91,7 +100,7 @@ export function ReporteForm({ tipo, submitLabel }: ReporteFormProps): React.JSX.
     e.preventDefault();
     setServerError(null);
 
-    const clientErrors = clientValidate(form, tipo);
+    const clientErrors = clientValidate(form, tipo, punto ?? null);
     setErrors(clientErrors);
 
     setSubmitting(true);
@@ -102,8 +111,9 @@ export function ReporteForm({ tipo, submitLabel }: ReporteFormProps): React.JSX.
         raza: form.raza.trim() || undefined,
         color: form.color.trim(),
         caracteristicasDistintivas: form.caracteristicasDistintivas.trim(),
-        ubicacion:
-          tipo === TipoReporte.ENCONTRADA ? form.ubicacion.trim() : undefined,
+        ubicacion: form.ubicacion.trim() || undefined,
+        latitud: punto?.lat,
+        longitud: punto?.lng,
       });
       if (esPerdida) {
         router.push(`/reportar/perdida/fotos?id=${reporte.id}`);
@@ -184,23 +194,25 @@ export function ReporteForm({ tipo, submitLabel }: ReporteFormProps): React.JSX.
         />
       </FormField>
 
-      {!esPerdida && (
-        <FormField
-          htmlFor="ubicacion"
-          label="Ubicación"
-          error={errors.ubicacion}
-        >
-          <Input
-            id="ubicacion"
-            name="ubicacion"
-            placeholder="Ej: Av. Principal y Calle 5, cerca del parque"
-            value={form.ubicacion}
-            onChange={(e) => updateField('ubicacion', e.target.value)}
-            aria-invalid={errors.ubicacion ? true : undefined}
-            aria-describedby={errors.ubicacion ? 'ubicacion-error' : undefined}
-          />
-        </FormField>
-      )}
+      <FormField
+        htmlFor="ubicacion"
+        label={esPerdida ? 'Ubicación (opcional)' : 'Ubicación'}
+        error={errors.ubicacion}
+      >
+        <Input
+          id="ubicacion"
+          name="ubicacion"
+          placeholder={
+            esPerdida
+              ? 'Ej: cerca del parque Bolívar, avenida principal'
+              : 'Ej: Av. Principal y Calle 5, cerca del parque'
+          }
+          value={form.ubicacion}
+          onChange={(e) => updateField('ubicacion', e.target.value)}
+          aria-invalid={errors.ubicacion ? true : undefined}
+          aria-describedby={errors.ubicacion ? 'ubicacion-error' : undefined}
+        />
+      </FormField>
 
       {serverError && (
         <p role="alert" className="text-sm font-medium text-destructive">

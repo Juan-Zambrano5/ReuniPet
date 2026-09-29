@@ -5,6 +5,7 @@ import {
   Inject,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -24,6 +25,7 @@ import { CurrentUserProvider } from '../usuarios/current-user.provider';
 import { MulterExceptionFilter } from '../common/multer-exception.filter';
 import { CreateReporteDto } from './dto/create-reporte.dto';
 import { ListReportesDto } from './dto/list-reportes.dto';
+import { UpdateUbicacionDto } from './dto/update-ubicacion.dto';
 import { FotosService } from './fotos.service';
 import { ReportesService } from './reportes.service';
 
@@ -76,11 +78,27 @@ export class ReportesController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string): Promise<ReporteResponse> {
-    const reporte = await this.reportesService.findById(id);
+  async findOne(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<ReporteResponse> {
+    // HU9 AC3: las coords se sirven según quién consulta (dueño o tercero).
+    const user = await this.currentUser.getUser(req);
+    const reporte = await this.reportesService.findById(id, user.id);
     if (!reporte) {
       throw new NotFoundException('Reporte no encontrado');
     }
     return reporte;
+  }
+
+  // HU9: actualizar el punto del reporte (solo su propietario).
+  @Patch(':id/ubicacion')
+  async updateUbicacion(
+    @Param('id') id: string,
+    @Body() dto: UpdateUbicacionDto,
+    @Req() req: Request,
+  ): Promise<ReporteResponse> {
+    const user = await this.currentUser.getUser(req);
+    return this.reportesService.updateUbicacion(id, dto, user);
   }
 }

@@ -22,6 +22,9 @@ export interface CreateReporteInput {
   color: string;
   caracteristicasDistintivas: string;
   ubicacion?: string;
+  // HU9 AC2: se almacenan junto al texto de referencia (van juntas).
+  latitud?: number;
+  longitud?: number;
 }
 
 export interface ReporteResponse {
@@ -34,6 +37,10 @@ export interface ReporteResponse {
   ubicacion: string | null;
   estado: EstadoReporte;
   propietarioId: string;
+  // HU9 AC3: exactas al propietario, aproximadas (~1km) a terceros.
+  latitud: number | null;
+  longitud: number | null;
+  esPropietario: boolean;
   createdAt: string;
   updatedAt: string;
   fotos?: FotografiaResponse[];

@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { EstadoReporte, Fotografia, Prisma, Reporte, Usuario } from '@prisma/client';
 import {
   EstadoReporte as SharedEstadoReporte,
@@ -12,6 +17,7 @@ import { MatchingService, normalizar } from '../matching/matching.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReporteDto } from './dto/create-reporte.dto';
 import { ListReportesDto } from './dto/list-reportes.dto';
+import { UpdateUbicacionDto } from './dto/update-ubicacion.dto';
 
 @Injectable()
 export class ReportesService {
@@ -21,6 +27,13 @@ export class ReportesService {
   ) {}
 
   async create(dto: CreateReporteDto, user: Usuario): Promise<ReporteResponse> {
+    // HU9 AC2: latitud y longitud viajan siempre en par.
+    if (
+      (dto.latitud !== undefined) !== (dto.longitud !== undefined)
+    ) {
+      throw new BadRequestException('latitud y longitud deben enviarse juntas');
+    }
+
     const estado =
       dto.tipo === TipoReporte.PERDIDA
         ? EstadoReporte.PERDIDA
@@ -34,6 +47,8 @@ export class ReportesService {
         color: dto.color,
         caracteristicasDistintivas: dto.caracteristicasDistintivas,
         ubicacion: dto.ubicacion ?? null,
+        latitud: dto.latitud ?? null,
+        longitud: dto.longitud ?? null,
         estado,
         propietarioId: user.id,
       },
@@ -41,16 +56,16 @@ export class ReportesService {
 
     await this.matching.compararReporte(reporte.id);
 
-    return this.toResponse(reporte);
+    return this.toResponse(reporte, user.id);
   }
 
-  async findById(id: string): Promise<ReporteResponse | null> {
+  async findById(id: string, userId: string): Promise<ReporteResponse | null> {
     const reporte = await this.prisma.reporte.findUnique({
       where: { id },
       include: { fotos: { orderBy: { orden: 'asc' } } },
     });
     if (!reporte) return null;
-    const response = this.toResponse(reporte);
+    const response = this.toResponse(reporte, userId);
     response.fotos = reporte.fotos.map((f) => ({
       id: f.id,
       reporteId: f.reporteId,
@@ -59,6 +74,34 @@ export class ReportesService {
       createdAt: f.createdAt.toISOString(),
     }));
     return response;
+  }
+
+  /** HU9: actualiza el punto (y opcionalmente el texto) de un reporte. */
+  async updateUbicacion(
+    id: string,
+    dto: UpdateUbicacionDto,
+    user: Usuario,
+  ): Promise<ReporteResponse> {
+    const reporte = await this.prisma.reporte.findUnique({ where: { id } });
+    if (!reporte) {
+      throw new NotFoundException('Reporte no encontrado');
+    }
+    if (reporte.propietarioId !== user.id) {
+      throw new ForbiddenException(
+        'Solo el propietario puede actualizar la ubicación',
+      );
+    }
+
+    const actualizado = await this.prisma.reporte.update({
+      where: { id },
+      data: {
+        latitud: dto.latitud,
+        longitud: dto.longitud,
+        ...(dto.ubicacion !== undefined ? { ubicacion: dto.ubicacion } : {}),
+      },
+    });
+
+    return this.toResponse(actualizado, user.id);
   }
 
   async list(
@@ -224,7 +267,10 @@ export class ReportesService {
     reporte: Reporte & { fotos: Fotografia[] },
     userId: string,
   ): ReporteListItem {
-    const esPropietario = reporte.propietarioId === userId;
+    const { latitud, longitud, esPropietario } = this.coordsParaUsuario(
+      reporte,
+      userId,
+    );
     return {
       id: reporte.id,
       tipo: reporte.tipo as TipoReporte,
@@ -234,14 +280,8 @@ export class ReportesService {
       caracteristicasDistintivas: reporte.caracteristicasDistintivas ?? '',
       estado: reporte.estado as SharedEstadoReporte,
       ubicacion: reporte.ubicacion,
-      latitud:
-        reporte.latitud === null || esPropietario
-          ? reporte.latitud
-          : this.aproximar(reporte.latitud),
-      longitud:
-        reporte.longitud === null || esPropietario
-          ? reporte.longitud
-          : this.aproximar(reporte.longitud),
+      latitud,
+      longitud,
       esPropietario,
       fotoPrincipal:
         reporte.fotos.length > 0
@@ -249,6 +289,29 @@ export class ReportesService {
           : null,
       createdAt: reporte.createdAt.toISOString(),
       updatedAt: reporte.updatedAt.toISOString(),
+    };
+  }
+
+  /**
+   * HU9 AC3: el propietario ve sus coordenadas exactas; cualquier otro
+   * usuario ve el punto aproximado a ~1km.
+   */
+  private coordsParaUsuario(
+    reporte: Pick<Reporte, 'latitud' | 'longitud' | 'propietarioId'>,
+    userId: string,
+  ): { latitud: number | null; longitud: number | null; esPropietario: boolean } {
+    const esPropietario = reporte.propietarioId === userId;
+    if (esPropietario || reporte.latitud === null || reporte.longitud === null) {
+      return {
+        latitud: reporte.latitud,
+        longitud: reporte.longitud,
+        esPropietario,
+      };
+    }
+    return {
+      latitud: this.aproximar(reporte.latitud),
+      longitud: this.aproximar(reporte.longitud),
+      esPropietario,
     };
   }
 
@@ -268,7 +331,11 @@ export class ReportesService {
     };
   }
 
-  private toResponse(reporte: Reporte): ReporteResponse {
+  private toResponse(reporte: Reporte, userId: string): ReporteResponse {
+    const { latitud, longitud, esPropietario } = this.coordsParaUsuario(
+      reporte,
+      userId,
+    );
     return {
       id: reporte.id,
       tipo: reporte.tipo as TipoReporte,
@@ -279,6 +346,9 @@ export class ReportesService {
       ubicacion: reporte.ubicacion,
       estado: reporte.estado as SharedEstadoReporte,
       propietarioId: reporte.propietarioId,
+      latitud,
+      longitud,
+      esPropietario,
       createdAt: reporte.createdAt.toISOString(),
       updatedAt: reporte.updatedAt.toISOString(),
     };

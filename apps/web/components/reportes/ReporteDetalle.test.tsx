@@ -19,6 +19,9 @@ const reporte: ReporteResponse = {
   color: 'negro',
   caracteristicasDistintivas: 'collar rojo',
   ubicacion: 'Parque Central',
+  latitud: 10.12,
+  longitud: -66.99,
+  esPropietario: false,
   estado: EstadoReporte.PERDIDA,
   propietarioId: 'user-1',
   createdAt: '2026-09-28T10:00:00.000Z',
@@ -62,5 +65,51 @@ describe('ReporteDetalle (HU6 AC3)', () => {
     expect(
       await screen.findByText(/no se pudo cargar el reporte/i),
     ).toBeInTheDocument();
+  });
+
+  it('HU9 AC3: a un tercero muestra las coordenadas como zona aproximada', async () => {
+    getReporteMock.mockResolvedValue(reporte);
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByTestId('reporte-coordenadas')).toHaveTextContent(
+      '10.12, -66.99',
+    );
+    expect(screen.getByTestId('reporte-precision')).toHaveTextContent(
+      'Zona aproximada (~1 km)',
+    );
+  });
+
+  it('HU9 AC3: al propietario le muestra el punto exacto', async () => {
+    getReporteMock.mockResolvedValue({
+      ...reporte,
+      latitud: 10.12345,
+      longitud: -66.98765,
+      esPropietario: true,
+    });
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByTestId('reporte-coordenadas')).toHaveTextContent(
+      '10.12345, -66.98765',
+    );
+    expect(screen.getByTestId('reporte-precision')).toHaveTextContent(
+      'Punto exacto',
+    );
+  });
+
+  it('HU9: sin coordenadas no se muestra la fila de coordenadas', async () => {
+    getReporteMock.mockResolvedValue({
+      ...reporte,
+      latitud: null,
+      longitud: null,
+    });
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByText('Detalle del reporte')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('reporte-coordenadas'),
+    ).not.toBeInTheDocument();
   });
 });

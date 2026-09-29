@@ -131,6 +131,31 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
                 {reporte.ubicacion ?? '—'}
               </dd>
             </div>
+            {reporte.latitud !== null && reporte.longitud !== null && (
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted">Coordenadas</dt>
+                <dd
+                  className="text-right font-medium text-text"
+                  data-testid="reporte-coordenadas"
+                >
+                  <span>
+                    {reporte.latitud}, {reporte.longitud}
+                  </span>
+                  <span
+                    className={`mt-1 block rounded-pill px-2 py-0.5 text-[11px] font-semibold ${
+                      reporte.esPropietario
+                        ? 'bg-primary-soft text-primary'
+                        : 'bg-surface text-muted'
+                    }`}
+                    data-testid="reporte-precision"
+                  >
+                    {reporte.esPropietario
+                      ? 'Punto exacto (tú eres el propietario)'
+                      : 'Zona aproximada (~1 km)'}
+                  </span>
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
       </div>

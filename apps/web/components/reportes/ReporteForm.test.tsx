@@ -30,8 +30,8 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
       screen.getByLabelText(/características distintivas/i),
     ).toBeInTheDocument();
     expect(
-      screen.queryByLabelText(/ubicación/i),
-    ).not.toBeInTheDocument();
+      screen.getByLabelText(/ubicación \(opcional\)/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /siguiente paso/i }),
     ).toBeInTheDocument();
@@ -84,5 +84,91 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
 
     await screen.findByText('Publicando...');
     expect(push).toHaveBeenCalledWith('/reportar/perdida/fotos?id=rep-test');
+  });
+
+  function completarCamposBasicos(): void {
+    fireEvent.click(screen.getByRole('radio', { name: /perro/i }));
+    fireEvent.change(screen.getByLabelText(/^color/i), {
+      target: { value: 'negro' },
+    });
+    fireEvent.change(screen.getByLabelText(/características distintivas/i), {
+      target: { value: 'collar rojo' },
+    });
+  }
+
+  function ultimoBodyEnviado(): Record<string, unknown> {
+    const calls = (global.fetch as jest.Mock).mock.calls;
+    const init = calls[calls.length - 1][1] as RequestInit;
+    return JSON.parse(String(init.body)) as Record<string, unknown>;
+  }
+
+  describe('HU9 — punto en el mapa', () => {
+    it('AC2: con punto marcado envía latitud y longitud al crear', async () => {
+      render(
+        <ReporteForm
+          tipo={TipoReporte.PERDIDA}
+          punto={{ lat: 10.12, lng: -66.99 }}
+        />,
+      );
+      completarCamposBasicos();
+      fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
+
+      await screen.findByText('Publicando...');
+      const body = ultimoBodyEnviado();
+      expect(body.latitud).toBe(10.12);
+      expect(body.longitud).toBe(-66.99);
+    });
+
+    it('AC2: sin punto marcado no envía coordenadas', async () => {
+      render(<ReporteForm tipo={TipoReporte.PERDIDA} />);
+      completarCamposBasicos();
+      fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
+
+      await screen.findByText('Publicando...');
+      const body = ultimoBodyEnviado();
+      expect(body.latitud).toBeUndefined();
+      expect(body.longitud).toBeUndefined();
+    });
+
+    it('AC1: en ENCONTRADA el punto en el mapa sustituye a la dirección escrita', async () => {
+      render(
+        <ReporteForm
+          tipo={TipoReporte.ENCONTRADA}
+          punto={{ lat: 10.4, lng: -66.85 }}
+        />,
+      );
+      completarCamposBasicos();
+      // Sin escribir la dirección: el punto debe bastar.
+      fireEvent.click(screen.getByRole('button', { name: /publicar reporte/i }));
+
+      expect(
+        screen.queryByText(/indica la ubicación/i),
+      ).not.toBeInTheDocument();
+      expect(global.fetch).toHaveBeenCalled();
+    });
+
+    it('AC1: en ENCONTRADA sin punto y sin dirección aparece el error', async () => {
+      render(<ReporteForm tipo={TipoReporte.ENCONTRADA} />);
+      completarCamposBasicos();
+      fireEvent.click(screen.getByRole('button', { name: /publicar reporte/i }));
+
+      expect(
+        await screen.findByText(/indica la ubicación/i),
+      ).toBeInTheDocument();
+    });
+
+    it('AC1: la dirección escrita sigue siendo válida sin punto en el mapa', async () => {
+      render(<ReporteForm tipo={TipoReporte.ENCONTRADA} />);
+      completarCamposBasicos();
+      fireEvent.change(screen.getByLabelText(/^ubicación/i), {
+        target: { value: 'Av. Principal con Calle 5' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /publicar reporte/i }));
+
+      await screen.findByText('Publicando...');
+      const body = ultimoBodyEnviado();
+      expect(body.ubicacion).toBe('Av. Principal con Calle 5');
+      expect(body.latitud).toBeUndefined();
+    });
   });
 });
