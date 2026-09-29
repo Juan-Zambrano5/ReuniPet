@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ListReportesResponse, TipoReporte } from '@reunipet/shared';
 import { RecientesZona } from '@/components/alertas/RecientesZona';
 import { getReportes } from '@/lib/api';
@@ -227,6 +227,161 @@ describe('RecientesZona (HU6)', () => {
 
       const enc = await screen.findByTestId('reciente-enc-1');
       expect(enc).toHaveAttribute('href', '/reportes/enc-1');
+    });
+  });
+
+  describe('HU8 — filtros de búsqueda', () => {
+    const geolocationMock = {
+      getCurrentPosition: jest.fn(),
+    };
+
+    beforeEach(() => {
+      Object.defineProperty(navigator, 'geolocation', {
+        value: geolocationMock,
+        configurable: true,
+      });
+      geolocationMock.getCurrentPosition.mockReset();
+    });
+
+    function escribir(id: string, value: string): void {
+      fireEvent.change(screen.getByLabelText(id), {
+        target: { value },
+      });
+    }
+
+    it('AC1: al buscar envía especie y color combinados (AND en el mismo request)', async () => {
+      getReportesMock.mockResolvedValue(reportes);
+
+      render(<RecientesZona />);
+      await screen.findByTestId('reciente-rep-1');
+
+      escribir('Especie', 'perro');
+      escribir('Color', 'negro');
+      fireEvent.click(screen.getByTestId('boton-buscar'));
+
+      await waitFor(() =>
+        expect(getReportesMock).toHaveBeenCalledWith({
+          tipo: TipoReporte.PERDIDA,
+          limit: 6,
+          especie: 'perro',
+          color: 'negro',
+        }),
+      );
+    });
+
+    it('AC1: los tres filtros de texto viajan juntos', async () => {
+      getReportesMock.mockResolvedValue(reportes);
+
+      render(<RecientesZona />);
+      await screen.findByTestId('reciente-rep-1');
+
+      escribir('Especie', 'perro');
+      escribir('Raza', 'labrador');
+      escribir('Color', 'negro');
+      fireEvent.click(screen.getByTestId('boton-buscar'));
+
+      await waitFor(() =>
+        expect(getReportesMock).toHaveBeenLastCalledWith({
+          tipo: TipoReporte.PERDIDA,
+          limit: 6,
+          especie: 'perro',
+          raza: 'labrador',
+          color: 'negro',
+        }),
+      );
+    });
+
+    it('AC3: limpiar filtros vuelve al listado completo sin recargar la página', async () => {
+      getReportesMock.mockResolvedValue(reportes);
+
+      const { container } = render(<RecientesZona />);
+      await screen.findByTestId('reciente-rep-1');
+
+      escribir('Especie', 'perro');
+      fireEvent.click(screen.getByTestId('boton-buscar'));
+      await waitFor(() =>
+        expect(getReportesMock).toHaveBeenLastCalledWith({
+          tipo: TipoReporte.PERDIDA,
+          limit: 6,
+          especie: 'perro',
+        }),
+      );
+
+      fireEvent.click(screen.getByTestId('boton-limpiar'));
+
+      await waitFor(() =>
+        expect(getReportesMock).toHaveBeenLastCalledWith({
+          tipo: TipoReporte.PERDIDA,
+          limit: 6,
+        }),
+      );
+      // La página sigue montada: no hubo recarga ni desmontaje.
+      expect(container.ownerDocument).toBe(document);
+      expect(screen.getByTestId('reciente-rep-1')).toBeInTheDocument();
+      // El input de especie volvió a quedar vacío.
+      expect(screen.getByLabelText('Especie')).toHaveValue('');
+    });
+
+    it('AC2: con filtros aplicados y sin resultados informa explícitamente', async () => {
+      getReportesMock.mockResolvedValue({
+        items: [],
+        meta: { page: 1, limit: 6, total: 0, totalPages: 0 },
+      });
+
+      render(<RecientesZona />);
+
+      escribir('Color', 'púrpura');
+      fireEvent.click(screen.getByTestId('boton-buscar'));
+
+      const vacio = await screen.findByText(
+        /no encontramos reportes que coincidan con esos filtros/i,
+      );
+      expect(vacio).toHaveAttribute('data-testid', 'sin-recientes');
+      expect(vacio).toHaveTextContent(/limpia los filtros/i);
+    });
+
+    it('HU8: "Cerca de mí" envía lat, lng y radioKm juntos', async () => {
+      getReportesMock.mockResolvedValue(reportes);
+      geolocationMock.getCurrentPosition.mockImplementation(
+        (ok: (pos: { coords: { latitude: number; longitude: number } }) => void) =>
+          ok({ coords: { latitude: 10.5, longitude: -66.5 } }),
+      );
+
+      render(<RecientesZona />);
+      await screen.findByTestId('reciente-rep-1');
+
+      fireEvent.click(screen.getByLabelText('Cerca de mí'));
+      fireEvent.click(screen.getByTestId('boton-buscar'));
+
+      await waitFor(() =>
+        expect(getReportesMock).toHaveBeenLastCalledWith({
+          tipo: TipoReporte.PERDIDA,
+          limit: 6,
+          lat: 10.5,
+          lng: -66.5,
+          radioKm: 10,
+        }),
+      );
+    });
+
+    it('HU8: si el navegador deniega la ubicación se muestra un aviso (sin búsqueda a ciegas)', async () => {
+      getReportesMock.mockResolvedValue(reportes);
+      geolocationMock.getCurrentPosition.mockImplementation(
+        (_ok: unknown, err: (e: unknown) => void) =>
+          err(new Error('denegada')),
+      );
+
+      render(<RecientesZona />);
+      await screen.findByTestId('reciente-rep-1');
+
+      const llamadasPrevias = getReportesMock.mock.calls.length;
+      fireEvent.click(screen.getByLabelText('Cerca de mí'));
+      fireEvent.click(screen.getByTestId('boton-buscar'));
+
+      const aviso = await screen.findByTestId('aviso-geo');
+      expect(aviso).toHaveTextContent(/no pudimos obtener tu ubicación/i);
+      // Solo la carga inicial, ninguna búsqueda con coords inventadas.
+      expect(getReportesMock).toHaveBeenCalledTimes(llamadasPrevias);
     });
   });
 });

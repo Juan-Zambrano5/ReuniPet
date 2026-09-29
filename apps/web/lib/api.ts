@@ -55,13 +55,33 @@ export async function getReporte(id: string): Promise<ReporteResponse> {
   return (await res.json()) as ReporteResponse;
 }
 
+// HU8: filtros opcionales de GET /reportes (todos combinables con AND).
+export interface ListadoFiltros {
+  tipo?: TipoReporte;
+  page?: number;
+  limit?: number;
+  especie?: string;
+  raza?: string;
+  color?: string;
+  lat?: number;
+  lng?: number;
+  radioKm?: number;
+}
+
 export async function getReportes(
-  params: { tipo?: TipoReporte; page?: number; limit?: number } = {},
+  params: ListadoFiltros = {},
 ): Promise<ListReportesResponse> {
   const qs = new URLSearchParams();
   if (params.tipo) qs.set('tipo', params.tipo);
   if (params.page) qs.set('page', String(params.page));
   if (params.limit) qs.set('limit', String(params.limit));
+  if (params.especie) qs.set('especie', params.especie);
+  if (params.raza) qs.set('raza', params.raza);
+  if (params.color) qs.set('color', params.color);
+  // lat/lng/radioKm viajan siempre juntos (contrato del backend).
+  if (params.lat !== undefined) qs.set('lat', String(params.lat));
+  if (params.lng !== undefined) qs.set('lng', String(params.lng));
+  if (params.radioKm !== undefined) qs.set('radioKm', String(params.radioKm));
   const query = qs.toString();
   const res = await fetch(`${API_URL}/reportes${query ? `?${query}` : ''}`, {
     headers: getSessionHeaders(),

@@ -312,4 +312,197 @@ describe('ReportesService', () => {
       expect(args.where.tipo).toBeUndefined();
     });
   });
+
+  describe('list (HU8 — filtros combinados)', () => {
+    const now = new Date('2026-09-28T12:00:00.000Z');
+
+    // Forma del `select` de la consulta de candidatos (campos escalares).
+    const candidatos = [
+      {
+        id: 'rep-perro-negro',
+        especie: 'Perro',
+        raza: 'Labrador',
+        color: 'Negro',
+        latitud: 10.01,
+        longitud: -66.0,
+      },
+      {
+        id: 'rep-perro-marron',
+        especie: 'Perro',
+        raza: 'Mestizo',
+        color: 'Marrón',
+        latitud: 10.1,
+        longitud: -66.0,
+      },
+      {
+        id: 'rep-gato-negro',
+        especie: 'Gato',
+        raza: null,
+        color: 'Negro',
+        latitud: null,
+        longitud: null,
+      },
+    ];
+
+    const completo = (c: (typeof candidatos)[number]) => ({
+      ...c,
+      tipo: 'PERDIDA',
+      caracteristicasDistintivas: '',
+      ubicacion: 'Parque Central',
+      estado: 'PERDIDA',
+      propietarioId: 'user-otro',
+      createdAt: now,
+      updatedAt: now,
+      fotos: [],
+    });
+
+    /** Simula el camino con filtros: 1ª llamada = candidatos, 2ª = página. */
+    function mockConFiltros(paginaIds: string[]) {
+      prismaMock.reporte.findMany
+        .mockResolvedValueOnce(candidatos)
+        .mockResolvedValueOnce(
+          candidatos.filter((c) => paginaIds.includes(c.id)).map(completo),
+        );
+    }
+
+    it('AC1: combina especie y color con lógica AND', async () => {
+      mockConFiltros(['rep-perro-negro']);
+
+      const result = await service.list(
+        { especie: 'perro', color: 'negro' },
+        user,
+      );
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].id).toBe('rep-perro-negro');
+      expect(result.meta.total).toBe(1);
+    });
+
+    it('AC1: un filtro que solo cumple un reporte no trae los que fallan otro filtro', async () => {
+      mockConFiltros([]);
+
+      const result = await service.list(
+        { especie: 'perro', color: 'negro', raza: 'pastor' },
+        user,
+      );
+
+      expect(result.items).toEqual([]);
+      expect(result.meta.total).toBe(0);
+    });
+
+    it('HU8: el filtro de color es tolerante a mayúsculas y acentos', async () => {
+      mockConFiltros(['rep-perro-marron']);
+
+      const result = await service.list({ color: 'MARRON' }, user);
+
+      expect(result.items.map((i) => i.id)).toEqual(['rep-perro-marron']);
+    });
+
+    it('HU8: la especie "gato" tampoco matchea "Gato" con acentos de por medio', async () => {
+      mockConFiltros(['rep-gato-negro']);
+
+      const result = await service.list({ especie: 'GATO' }, user);
+
+      expect(result.items.map((i) => i.id)).toEqual(['rep-gato-negro']);
+    });
+
+    it('HU8: filtrar por raza excluye los reportes sin raza', async () => {
+      mockConFiltros(['rep-perro-negro']);
+
+      const result = await service.list({ raza: 'labrador' }, user);
+
+      expect(result.items.map((i) => i.id)).toEqual(['rep-perro-negro']);
+    });
+
+    it('HU8: Haversine incluye reportes dentro del radio y excluye los de afuera', async () => {
+      // Centro (10,-66): rep-perro-negro ~1.1km (dentro de 5),
+      // rep-perro-marron ~11.1km (fuera), rep-gato-negro sin coords (fuera).
+      mockConFiltros(['rep-perro-negro']);
+
+      const result = await service.list(
+        { lat: 10, lng: -66, radioKm: 5 },
+        user,
+      );
+
+      expect(result.items.map((i) => i.id)).toEqual(['rep-perro-negro']);
+      expect(result.meta.total).toBe(1);
+    });
+
+    it('HU8: con radio amplio entra el reporte que estaba fuera', async () => {
+      mockConFiltros(['rep-perro-negro', 'rep-perro-marron']);
+
+      const result = await service.list(
+        { lat: 10, lng: -66, radioKm: 50 },
+        user,
+      );
+
+      expect(result.items.map((i) => i.id)).toEqual([
+        'rep-perro-negro',
+        'rep-perro-marron',
+      ]);
+    });
+
+    it('HU8: lat/lng/radioKm deben enviarse juntos (400 si falta alguno)', async () => {
+      await expect(service.list({ lat: 10 }, user)).rejects.toThrow(
+        'lat, lng y radioKm deben enviarse juntos',
+      );
+      await expect(
+        service.list({ lat: 10, radioKm: 5 }, user),
+      ).rejects.toThrow('lat, lng y radioKm deben enviarse juntos');
+      await expect(service.list({ lng: -66 }, user)).rejects.toThrow(
+        'lat, lng y radioKm deben enviarse juntos',
+      );
+      expect(prismaMock.reporte.findMany).not.toHaveBeenCalled();
+    });
+
+    it('HU8: pagina sobre el resultado filtrado y refleja el total real', async () => {
+      prismaMock.reporte.findMany
+        .mockResolvedValueOnce(candidatos)
+        .mockResolvedValueOnce([completo(candidatos[0]), completo(candidatos[2])]);
+
+      const result = await service.list({ color: 'negro', limit: 2 }, user);
+
+      // 2 coincidencias de color negro (perro y gato), limit 2 → 1 página.
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 2,
+        total: 2,
+        totalPages: 1,
+      });
+      expect(prismaMock.reporte.count).not.toHaveBeenCalled();
+
+      prismaMock.reporte.findMany
+        .mockResolvedValueOnce(candidatos)
+        .mockResolvedValueOnce([]);
+
+      const pagina2 = await service.list(
+        { color: 'negro', page: 2, limit: 2 },
+        user,
+      );
+      expect(pagina2.items).toEqual([]);
+      expect(pagina2.meta).toEqual({
+        page: 2,
+        limit: 2,
+        total: 2,
+        totalPages: 1,
+      });
+    });
+
+    it('HU8: el orden devuelto respeta el orden original (más recientes primero)', async () => {
+      prismaMock.reporte.findMany
+        .mockResolvedValueOnce(candidatos)
+        // La BD devuelve desordenado para forzar el re-orden por paginaIds.
+        .mockResolvedValueOnce([
+          completo(candidatos[2]),
+          completo(candidatos[0]),
+        ]);
+
+      const result = await service.list({ color: 'negro' }, user);
+
+      expect(result.items.map((i) => i.id)).toEqual([
+        'rep-perro-negro',
+        'rep-gato-negro',
+      ]);
+    });
+  });
 });

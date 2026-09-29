@@ -289,4 +289,185 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
         .expect(400);
     });
   });
+
+  describe('HU8 — filtros combinados (AND + Haversine)', () => {
+    let perroNegroId: string;
+    let perroMarronId: string;
+
+    beforeAll(async () => {
+      await limpiar();
+
+      const tercero = await prisma.usuario.create({
+        data: {
+          nombre: 'Tercero Filtros',
+          email: TERCERO_EMAIL,
+          telefono: '04120000001',
+        },
+      });
+      terceroId = tercero.id;
+
+      // ~1.11 km al norte de perroNegro.
+      const perroNegro = await prisma.reporte.create({
+        data: {
+          tipo: 'PERDIDA',
+          especie: 'Perro',
+          raza: 'Labrador',
+          color: 'negro',
+          caracteristicasDistintivas: 'collar rojo',
+          ubicacion: 'Parque Central',
+          latitud: 10.5,
+          longitud: -66.5,
+          estado: 'PERDIDA',
+          propietarioId: terceroId,
+          createdAt: new Date('2026-09-28T10:00:00.000Z'),
+        },
+      });
+      perroNegroId = perroNegro.id;
+
+      // ~1.11 km al norte de perroNegro (0.01° de latitud).
+      const perroMarron = await prisma.reporte.create({
+        data: {
+          tipo: 'PERDIDA',
+          especie: 'Perro',
+          raza: 'Mestizo',
+          color: 'Marrón',
+          caracteristicasDistintivas: 'mancha en el ojo',
+          ubicacion: 'Av. Libertador',
+          latitud: 10.51,
+          longitud: -66.5,
+          estado: 'PERDIDA',
+          propietarioId: terceroId,
+          createdAt: new Date('2026-09-28T09:00:00.000Z'),
+        },
+      });
+      perroMarronId = perroMarron.id;
+
+      // Lejos + sin coordenadas: nunca pasa el filtro de radio.
+      await prisma.reporte.create({
+        data: {
+          tipo: 'PERDIDA',
+          especie: 'Gato',
+          color: 'blanco',
+          caracteristicasDistintivas: 'oreja cortada',
+          ubicacion: 'Av. Central',
+          estado: 'PERDIDA',
+          propietarioId: terceroId,
+          createdAt: new Date('2026-09-27T10:00:00.000Z'),
+        },
+      });
+    });
+
+    it('AC1: especie + color se combinan con AND (no OR)', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/reportes?especie=perro&color=negro')
+        .expect(200);
+
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0].id).toBe(perroNegroId);
+      expect(res.body.meta.total).toBe(1);
+    });
+
+    it('AC1: un filtro extra que no se cumpe descarta el resto', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/reportes?especie=perro&color=negro&raza=pastor')
+        .expect(200);
+
+      expect(res.body.items).toEqual([]);
+      expect(res.body.meta.total).toBe(0);
+    });
+
+    it('HU8: los filtros de texto son tolerantes a mayúsculas y acentos', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/reportes?especie=PERRO&color=MARRON')
+        .expect(200);
+
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0].id).toBe(perroMarronId);
+    });
+
+    it('AC2: una zona sin reportes devuelve total 0 (no un error)', async () => {
+      // Centro en el océano, lejos de todo lo sembrado.
+      const res = await request(app.getHttpServer())
+        .get('/reportes?lat=5&lng=-60&radioKm=10')
+        .expect(200);
+
+      expect(res.body.items).toEqual([]);
+      expect(res.body.meta).toMatchObject({ total: 0, page: 1 });
+    });
+
+    it('HU8: el radio Haversine incluye lo cercano y excluye lo lejano', async () => {
+      // Desde perroNegro: perroMarron está a ~1.11 km → dentro de radio 50.
+      const cerca = await request(app.getHttpServer())
+        .get('/reportes?lat=10.5&lng=-66.5&radioKm=50')
+        .expect(200);
+
+      const ids = cerca.body.items.map((i: { id: string }) => i.id);
+      expect(ids).toContain(perroNegroId);
+      expect(ids).toContain(perroMarronId);
+
+      // Radio de 1 km: perroMarron (1.11 km) queda fuera, solo queda el centro.
+      const muyCerca = await request(app.getHttpServer())
+        .get('/reportes?lat=10.5&lng=-66.5&radioKm=1')
+        .expect(200);
+
+      expect(muyCerca.body.items).toHaveLength(1);
+      expect(muyCerca.body.items[0].id).toBe(perroNegroId);
+    });
+
+    it('HU8: radio con especie combinados siguen la lógica AND', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/reportes?especie=gato&lat=10.5&lng=-66.5&radioKm=50')
+        .expect(200);
+
+      // El gato está a cientos de km y sin coordenadas: no pasa ninguno.
+      expect(res.body.items).toEqual([]);
+      expect(res.body.meta.total).toBe(0);
+    });
+
+    it('HU8: lat/lng/radioKm deben enviarse juntos (400 si falta alguno)', async () => {
+      await request(app.getHttpServer())
+        .get('/reportes?lat=10.5')
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/reportes?lat=10.5&lng=-66.5')
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/reportes?radioKm=5')
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/reportes?lng=-66.5&radioKm=5')
+        .expect(400);
+    });
+
+    it('HU8: valida rangos de lat, lng y radioKm', async () => {
+      await request(app.getHttpServer())
+        .get('/reportes?lat=100&lng=-66.5&radioKm=5')
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/reportes?lat=10.5&lng=-200&radioKm=5')
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/reportes?lat=10.5&lng=-66.5&radioKm=0')
+        .expect(400);
+      await request(app.getHttpServer())
+        .get('/reportes?lat=10.5&lng=-66.5&radioKm=150')
+        .expect(400);
+    });
+
+    it('HU8: pagina sobre el resultado filtrado con el total real', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/reportes?especie=perro&limit=1&page=2')
+        .expect(200);
+
+      // 2 perros en total; page=2 con limit=1 → el más antiguo.
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0].id).toBe(perroMarronId);
+      expect(res.body.meta).toMatchObject({
+        page: 2,
+        limit: 1,
+        total: 2,
+        totalPages: 2,
+      });
+    });
+  });
 });
