@@ -69,7 +69,8 @@ export class ReportesService {
     const limit = dto.limit ?? 20;
 
     const where: Prisma.ReporteWhereInput = {
-      tipo: dto.tipo ?? TipoReporte.PERDIDA,
+      // HU7: sin tipo = ambos tipos (PERDIDA y ENCONTRADA)
+      tipo: dto.tipo,
       estado: { not: EstadoReporte.RECUPERADA },
     };
 

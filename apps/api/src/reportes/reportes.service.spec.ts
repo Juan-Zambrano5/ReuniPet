@@ -194,7 +194,10 @@ describe('ReportesService', () => {
       prismaMock.reporte.count.mockResolvedValue(1);
       prismaMock.reporte.findMany.mockResolvedValue([reporteAjeno]);
 
-      const result = await service.list({}, user);
+      const result = await service.list(
+        { tipo: TipoReporte.PERDIDA },
+        user,
+      );
 
       expect(prismaMock.reporte.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -277,6 +280,36 @@ describe('ReportesService', () => {
         total: 7,
         totalPages: 2,
       });
+    });
+
+    it('HU7 AC1: con tipo=ENCONTRADA filtra solo reportes encontrados', async () => {
+      prismaMock.reporte.count.mockResolvedValue(1);
+      prismaMock.reporte.findMany.mockResolvedValue([
+        { ...reporteAjeno, tipo: 'ENCONTRADA', estado: 'ENCONTRADA' },
+      ]);
+
+      const result = await service.list(
+        { tipo: TipoReporte.ENCONTRADA },
+        user,
+      );
+
+      expect(prismaMock.reporte.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tipo: 'ENCONTRADA', estado: { not: 'RECUPERADA' } },
+        }),
+      );
+      expect(result.items[0].tipo).toBe('ENCONTRADA');
+      expect(result.items[0].estado).toBe('ENCONTRADA');
+    });
+
+    it('HU7: sin tipo no filtra por tipo (muestra ambos)', async () => {
+      prismaMock.reporte.count.mockResolvedValue(2);
+      prismaMock.reporte.findMany.mockResolvedValue([]);
+
+      await service.list({}, user);
+
+      const args = prismaMock.reporte.findMany.mock.calls[0][0];
+      expect(args.where.tipo).toBeUndefined();
     });
   });
 });

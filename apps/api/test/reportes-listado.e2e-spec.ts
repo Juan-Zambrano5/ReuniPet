@@ -64,6 +64,15 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
       expect(res.body.items).toEqual([]);
       expect(res.body.meta).toMatchObject({ total: 0, page: 1 });
     });
+
+    it('HU7 AC2: también devuelve vacía la lista de ENCONTRADA', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/reportes?tipo=ENCONTRADA')
+        .expect(200);
+
+      expect(res.body.items).toEqual([]);
+      expect(res.body.meta).toMatchObject({ total: 0, page: 1 });
+    });
   });
 
   describe('con reportes sembrados', () => {
@@ -222,10 +231,50 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
       });
     });
 
-    it('HU6: todavía rechaza tipo=ENCONTRADA (llega con HU7)', async () => {
-      await request(app.getHttpServer())
+    it('HU7 AC1: lista ENCONTRADA de más a menos reciente, sin reportes perdidos', async () => {
+      const res = await request(app.getHttpServer())
         .get('/reportes?tipo=ENCONTRADA')
-        .expect(400);
+        .expect(200);
+
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0]).toMatchObject({
+        tipo: 'ENCONTRADA',
+        estado: 'ENCONTRADA',
+        especie: 'Canario',
+        color: 'amarillo',
+        ubicacion: 'Calle 5',
+      });
+      expect(res.body.items[0].createdAt).toBe('2026-09-28T12:00:00.000Z');
+    });
+
+    it('HU7 AC3: desde el listado de encontradas, el detalle responde con sus datos', async () => {
+      const listado = await request(app.getHttpServer())
+        .get('/reportes?tipo=ENCONTRADA')
+        .expect(200);
+
+      const id = listado.body.items[0].id;
+      const detalle = await request(app.getHttpServer())
+        .get(`/reportes/${id}`)
+        .expect(200);
+
+      expect(detalle.body).toMatchObject({
+        id,
+        tipo: 'ENCONTRADA',
+        especie: 'Canario',
+        estado: 'ENCONTRADA',
+        ubicacion: 'Calle 5',
+      });
+    });
+
+    it('HU7: sin tipo lista ambos tipos a la vez', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/reportes')
+        .expect(200);
+
+      expect(res.body.items).toHaveLength(3);
+      const tipos = res.body.items.map((i: { tipo: string }) => i.tipo);
+      expect(tipos).toContain('PERDIDA');
+      expect(tipos).toContain('ENCONTRADA');
     });
 
     it('valida los query params: page y limit fuera de rango', async () => {

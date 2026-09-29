@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertaResponse, TipoReporte } from '@reunipet/shared';
+import { AlertaResponse } from '@reunipet/shared';
 import { AlertCard } from '@/components/alertas/AlertCard';
 import { RecientesZona } from '@/components/alertas/RecientesZona';
 import { MapPin } from 'lucide-react';
@@ -140,7 +140,7 @@ export default function AlertasPage(): React.JSX.Element {
         <p className="mt-1 text-sm text-muted">
           Últimos reportes de mascotas perdidas publicados por la comunidad.
         </p>
-        <RecientesZona tipo={TipoReporte.PERDIDA} />
+        <RecientesZona />
       </section>
     </div>
   );

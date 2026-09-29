@@ -1,13 +1,11 @@
 import { TipoReporte } from '@reunipet/shared';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class ListReportesDto {
-  // HU6: solo listado de PERDIDAS. HU7 amplía a ENCONTRADA.
+  // HU6/HU7: PERDIDA y ENCONTRADA. Sin tipo = ambos tipos.
   @IsOptional()
-  @IsIn([TipoReporte.PERDIDA], {
-    message: 'tipo debe ser PERDIDA (por ahora solo reportes perdidos)',
-  })
+  @IsEnum(TipoReporte, { message: 'tipo debe ser PERDIDA o ENCONTRADA' })
   tipo?: TipoReporte;
 
   @IsOptional()

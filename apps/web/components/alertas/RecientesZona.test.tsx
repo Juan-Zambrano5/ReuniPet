@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ListReportesResponse, TipoReporte } from '@reunipet/shared';
 import { RecientesZona } from '@/components/alertas/RecientesZona';
 import { getReportes } from '@/lib/api';
@@ -79,7 +79,7 @@ describe('RecientesZona (HU6)', () => {
   it('AC1: muestra foto, especie, raza, color, ubicación y tiempo de cada reporte', async () => {
     getReportesMock.mockResolvedValue(reportes);
 
-    render(<RecientesZona tipo={TipoReporte.PERDIDA} />);
+    render(<RecientesZona tipoInicial={TipoReporte.PERDIDA} />);
 
     const primero = await screen.findByTestId('reciente-rep-1');
     expect(primero).toHaveTextContent('Perro (Labrador)');
@@ -100,7 +100,7 @@ describe('RecientesZona (HU6)', () => {
   it('AC1: pide el listado de PERDIDAS al backend', async () => {
     getReportesMock.mockResolvedValue(reportes);
 
-    render(<RecientesZona tipo={TipoReporte.PERDIDA} />);
+    render(<RecientesZona tipoInicial={TipoReporte.PERDIDA} />);
 
     await screen.findByTestId('reciente-rep-1');
     expect(getReportesMock).toHaveBeenCalledWith({
@@ -115,7 +115,7 @@ describe('RecientesZona (HU6)', () => {
       meta: { page: 1, limit: 6, total: 0, totalPages: 0 },
     });
 
-    render(<RecientesZona tipo={TipoReporte.PERDIDA} />);
+    render(<RecientesZona tipoInicial={TipoReporte.PERDIDA} />);
 
     const vacio = await screen.findByTestId('sin-recientes');
     expect(vacio).toHaveTextContent(/no hay reportes de mascotas perdidas/i);
@@ -124,7 +124,7 @@ describe('RecientesZona (HU6)', () => {
   it('AC3: cada reporte es un enlace a su pantalla de detalle', async () => {
     getReportesMock.mockResolvedValue(reportes);
 
-    render(<RecientesZona tipo={TipoReporte.PERDIDA} />);
+    render(<RecientesZona tipoInicial={TipoReporte.PERDIDA} />);
 
     const primero = await screen.findByTestId('reciente-rep-1');
     expect(primero).toHaveAttribute('href', '/reportes/rep-1');
@@ -137,9 +137,96 @@ describe('RecientesZona (HU6)', () => {
   it('muestra un mensaje de error si el listado no se pudo cargar', async () => {
     getReportesMock.mockRejectedValue(new Error('network'));
 
-    render(<RecientesZona tipo={TipoReporte.PERDIDA} />);
+    render(<RecientesZona tipoInicial={TipoReporte.PERDIDA} />);
 
     const error = await screen.findByTestId('recientes-error');
     expect(error).toHaveTextContent(/no se pudieron cargar/i);
+  });
+
+  describe('HU7 — listado de encontradas', () => {
+    const encontradas: ListReportesResponse = {
+      items: [
+        {
+          id: 'enc-1',
+          tipo: TipoReporte.ENCONTRADA,
+          especie: 'Canario',
+          raza: null,
+          color: 'amarillo',
+          caracteristicasDistintivas: 'pico roto',
+          estado: 'ENCONTRADA',
+          ubicacion: 'Calle 5',
+          latitud: null,
+          longitud: null,
+          esPropietario: false,
+          fotoPrincipal: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+      meta: { page: 1, limit: 6, total: 1, totalPages: 1 },
+    };
+
+    function mockPorTipo(): void {
+      getReportesMock.mockImplementation(({ tipo }: { tipo: TipoReporte }) =>
+        Promise.resolve(
+          tipo === TipoReporte.ENCONTRADA ? encontradas : reportes,
+        ),
+      );
+    }
+
+    it('AC1: al pulsar "Encontradas" carga y muestra el listado de ENCONTRADA', async () => {
+      mockPorTipo();
+
+      render(<RecientesZona />);
+      await screen.findByTestId('reciente-rep-1');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Encontradas' }));
+
+      expect(getReportesMock).toHaveBeenCalledWith({
+        tipo: TipoReporte.ENCONTRADA,
+        limit: 6,
+      });
+      const enc = await screen.findByTestId('reciente-enc-1');
+      expect(enc).toHaveTextContent('Canario');
+      expect(enc).toHaveTextContent('amarillo');
+      expect(enc).toHaveTextContent('Calle 5');
+      expect(screen.queryByTestId('reciente-rep-1')).not.toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Encontradas' }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      expect(
+        screen.getByRole('button', { name: 'Perdidas' }),
+      ).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('AC2: el estado vacío de ENCONTRADA usa su propio mensaje', async () => {
+      getReportesMock.mockImplementation(({ tipo }: { tipo: TipoReporte }) =>
+        Promise.resolve(
+          tipo === TipoReporte.ENCONTRADA
+            ? { items: [], meta: { page: 1, limit: 6, total: 0, totalPages: 0 } }
+            : reportes,
+        ),
+      );
+
+      render(<RecientesZona />);
+      await screen.findByTestId('reciente-rep-1');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Encontradas' }));
+
+      const vacio = await screen.findByTestId('sin-recientes');
+      expect(vacio).toHaveTextContent(/no hay reportes de mascotas encontradas/i);
+    });
+
+    it('AC3: los reportes de encontradas también enlazan a su detalle', async () => {
+      mockPorTipo();
+
+      render(<RecientesZona />);
+      await screen.findByTestId('reciente-rep-1');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Encontradas' }));
+
+      const enc = await screen.findByTestId('reciente-enc-1');
+      expect(enc).toHaveAttribute('href', '/reportes/enc-1');
+    });
   });
 });
