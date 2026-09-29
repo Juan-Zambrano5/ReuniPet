@@ -35,6 +35,8 @@ model Reporte {
   color                      String
   caracteristicasDistintivas String?
   ubicacion                  String?
+  latitud                    Float?
+  longitud                   Float?
   estado                     EstadoReporte
   propietarioId              String
   propietario                Usuario       @relation(fields: [propietarioId], references: [id])
