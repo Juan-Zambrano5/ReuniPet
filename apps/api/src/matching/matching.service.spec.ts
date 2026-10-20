@@ -18,6 +18,8 @@ function makeReporte(overrides: Partial<Reporte>): Reporte {
     color: 'Negro',
     caracteristicasDistintivas: 'collar rojo',
     ubicacion: null,
+    latitud: null,
+    longitud: null,
     estado: 'PERDIDA',
     propietarioId: 'user-1',
     createdAt: now,
