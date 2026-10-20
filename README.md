@@ -193,26 +193,71 @@ Abrí <http://localhost:3000> y probá crear un reporte.
 
 ---
 
-## Tests y lint
+## Cómo correr los tests
+
+### En un clon limpio
+
+Desde la raíz del repo, en este orden:
 
 ```bash
-npm test    # todos los workspaces
+# 1. Instalar dependencias (fiel al package-lock.json)
+npm ci
+
+# 2. Compilar packages/shared (su main/types apuntan a dist/, que NO está versionado)
+npm run build --workspace packages/shared
+
+# 3. Generar el cliente de Prisma
+npm run prisma:generate --workspace apps/api
+```
+
+> **Nota:** si las suites fallan al arrancar con
+> `Cannot find module '@reunipet/shared'`, falta el paso 2: corré
+> `npm run build --workspace packages/shared`. (También está en
+> "Problemas frecuentes".)
+
+### API — unit (sin base de datos)
+
+```bash
+npm run test --workspace apps/api    # 59 tests (todo mockeado)
+```
+
+### API — e2e (necesita una base de datos de prueba)
+
+Los e2e usan `DATABASE_URL` de `apps/api/.env` y **borran** reportes,
+fotografías y coincidencias al finalizar (`deleteMany` en los
+`*.e2e-spec.ts`). No los corras contra una base con datos que quieras
+conservar: usá una base separada (por ejemplo `reunipet_test`).
+
+```bash
+# 1. Crear la base de prueba (psql, pgAdmin o tu herramienta preferida)
+CREATE DATABASE reunipet_test;
+
+# 2. Que apps/api/.env apunte a esa base
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/reunipet_test?schema=public"
+
+# 3. Aplicar migraciones y seed (el seed crea el usuario demo,
+#    que varios e2e requieren)
+npm run prisma:deploy --workspace apps/api
+npm run prisma:seed   --workspace apps/api
+
+# 4. Correr los e2e
+npm run test:e2e --workspace apps/api   # 57 tests
+```
+
+### Web — unit (sin base de datos)
+
+```bash
+npm run test --workspace apps/web    # 49 tests
+```
+
+### Todos los workspaces
+
+```bash
+npm test    # api (unit) + web + shared (no tiene tests)
 npm run lint
 ```
 
-Para un solo workspace:
-
-```bash
-npm run test --workspace apps/api
-npm run test --workspace apps/web
-npm run test:e2e --workspace apps/api   # e2e con Supertest
-```
-
-> **Advertencia:** los tests e2e de la API usan la base de datos real y
-> **borran** reportes, fotografías y coincidencias al finalizar
-> (`deleteMany` en los `*.e2e-spec.ts`). No los corras contra una base con
-> datos que quieras conservar: usá una base separada (por ejemplo
-> `reunipet_test`) apuntando `DATABASE_URL` a ella antes de correrlos.
+Total: **165 tests** (api unit 59 + e2e 57 + web 49).
 
 ## Comandos útiles (raíz)
 
