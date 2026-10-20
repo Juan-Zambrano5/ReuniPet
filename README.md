@@ -5,7 +5,8 @@ encontradas: los propietarios publican reportes con fotos, la comunidad los
 consulta con filtros y el sistema detecta posibles coincidencias y genera
 alertas.
 
-**Rama actual con el trabajo completo:** `sprint2` (Sprint 1 y Sprint 2).
+**Rama por defecto:** `main` — tiene el trabajo completo (Sprint 1 y Sprint 2)
+y es idéntica a `sprint2`; un clon normal ya trae todo.
 
 Hay dos formas de correr el proyecto:
 
