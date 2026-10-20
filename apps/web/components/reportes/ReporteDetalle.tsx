@@ -1,11 +1,12 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { EstadoReporte, ReporteResponse } from '@reunipet/shared';
 import { ErrorText } from '@/components/ErrorText';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { fotoUrl, getReporte } from '@/lib/api';
+import { ApiError, fotoUrl, getReporte } from '@/lib/api';
 import { tiempoRelativo } from '@/lib/tiempo';
 
 const BADGE: Record<
@@ -25,17 +26,23 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
   const [reporte, setReporte] = React.useState<ReporteResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [noEncontrado, setNoEncontrado] = React.useState(false);
+  const [fotoIndex, setFotoIndex] = React.useState(0);
 
   const regresar = React.useCallback(() => {
     if (typeof window !== 'undefined' && window.history.length > 1) {
       window.history.back();
       return;
     }
-    window.location.href = '/alertas';
+    window.location.href = '/';
   }, []);
 
   React.useEffect(() => {
     let cancelado = false;
+    setLoading(true);
+    setError(null);
+    setNoEncontrado(false);
+    setFotoIndex(0);
     void (async () => {
       try {
         const datos = await getReporte(id);
@@ -43,9 +50,13 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
           setReporte(datos);
           setLoading(false);
         }
-      } catch {
+      } catch (err) {
         if (!cancelado) {
-          setError('No se pudo cargar el reporte.');
+          if (err instanceof ApiError && err.status === 404) {
+            setNoEncontrado(true);
+          } else {
+            setError('No se pudo cargar el reporte.');
+          }
           setLoading(false);
         }
       }
@@ -59,6 +70,24 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
     return (
       <div className="container mx-auto max-w-2xl px-4 py-12 text-center text-muted">
         Cargando reporte...
+      </div>
+    );
+  }
+
+  // HU13 AC3: reporte inexistente → mensaje claro con enlace al listado.
+  if (noEncontrado) {
+    return (
+      <div className="container mx-auto max-w-2xl px-4 py-12 text-center">
+        <h1 className="text-2xl font-bold text-text" data-testid="no-encontrado">
+          Reporte no encontrado
+        </h1>
+        <p className="mt-2 text-sm text-muted">
+          Es posible que el reporte haya sido eliminado o que el enlace sea
+          incorrecto.
+        </p>
+        <Button asChild variant="secondary" className="mt-4">
+          <Link href="/">Volver al listado</Link>
+        </Button>
       </div>
     );
   }
@@ -80,7 +109,8 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
   }
 
   const badge = BADGE[reporte.estado];
-  const foto = reporte.fotos?.[0];
+  const fotos = reporte.fotos ?? [];
+  const fotoActual = fotos[fotoIndex];
 
   return (
     <div className="container mx-auto max-w-2xl px-4 py-8">
@@ -90,21 +120,71 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
       </div>
 
       <div className="mt-6 overflow-hidden rounded-card border border-border bg-card shadow-card">
-        <div className="flex h-64 items-center justify-center bg-surface">
-          {foto ? (
+        {/* HU13 AC2: sin fotos, un mensaje de reemplazo (nunca un espacio roto). */}
+        <div
+          className="flex h-64 items-center justify-center bg-surface"
+          data-testid="galeria-principal"
+        >
+          {fotoActual ? (
             /* eslint-disable-next-line @next/next/no-img-element */
             <img
-              src={fotoUrl(foto.url)}
-              alt={`Foto de ${reporte.especie}`}
+              src={fotoUrl(fotoActual.url)}
+              alt={`Foto ${fotoIndex + 1} de ${reporte.especie}`}
               className="h-full w-full object-cover"
             />
           ) : (
-            <span className="text-sm text-muted">Sin fotografía</span>
+            <div className="px-6 text-center" data-testid="foto-placeholder">
+              <p className="text-sm font-medium text-muted">
+                Este reporte no tiene fotografías
+              </p>
+              <p className="mt-1 text-xs text-muted">
+                Puedes reconocerlo por sus características distintivas
+              </p>
+            </div>
           )}
         </div>
 
+        {/* Miniaturas clicables cuando hay más de una foto. */}
+        {fotos.length > 1 && (
+          <div
+            className="flex gap-2 border-t border-border p-3"
+            data-testid="galeria-miniaturas"
+          >
+            {fotos.map((f, i) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFotoIndex(i)}
+                aria-label={`Ver foto ${i + 1} de ${fotos.length}`}
+                aria-pressed={i === fotoIndex}
+                className={`h-14 w-14 overflow-hidden rounded border-2 transition-colors ${
+                  i === fotoIndex
+                    ? 'border-primary'
+                    : 'border-transparent hover:border-border'
+                }`}
+                data-testid={`miniatura-${i}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={fotoUrl(f.url)}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="p-6">
-          <p className="text-lg font-semibold capitalize text-text">
+          <p
+            className="text-xs font-semibold uppercase tracking-wide text-muted"
+            data-testid="reporte-tipo"
+          >
+            {reporte.tipo === 'PERDIDA'
+              ? 'Mascota perdida'
+              : 'Mascota encontrada'}
+          </p>
+          <p className="mt-1 text-lg font-semibold capitalize text-text">
             {reporte.especie}
             {reporte.raza ? ` (${reporte.raza})` : ''}
           </p>

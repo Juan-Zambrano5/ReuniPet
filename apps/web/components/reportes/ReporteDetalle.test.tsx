@@ -1,12 +1,13 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { EstadoReporte, ReporteResponse, TipoReporte } from '@reunipet/shared';
 import { ReporteDetalle } from '@/components/reportes/ReporteDetalle';
-import { getReporte } from '@/lib/api';
+import { ApiError, getReporte } from '@/lib/api';
 
 jest.mock('@/lib/api', () => ({
   getReporte: jest.fn(),
   fotoUrl: (url: string) => url,
+  ApiError: jest.requireActual('@/lib/api').ApiError,
 }));
 
 const getReporteMock = getReporte as jest.Mock;
@@ -111,5 +112,109 @@ describe('ReporteDetalle (HU6 AC3)', () => {
     expect(
       screen.queryByTestId('reporte-coordenadas'),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('ReporteDetalle (HU13)', () => {
+  const foto = (n: number) => ({
+    id: `f-${n}`,
+    reporteId: 'rep-1',
+    url: `/files/foto-${n}.jpg`,
+    orden: n,
+    createdAt: '2026-09-28T10:00:00.000Z',
+  });
+
+  beforeEach(() => {
+    getReporteMock.mockReset();
+  });
+
+  it('AC1: muestra la foto principal con sus miniaturas y cambia al pulsar una miniatura', async () => {
+    getReporteMock.mockResolvedValue({
+      ...reporte,
+      fotos: [foto(0), foto(1), foto(2)],
+    });
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByTestId('galeria-principal')).toBeInTheDocument();
+    expect(screen.getByTestId('galeria-miniaturas')).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/files/foto-0.jpg');
+    expect(screen.getByTestId('miniatura-0')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    fireEvent.click(screen.getByTestId('miniatura-1'));
+
+    expect(screen.getByRole('img')).toHaveAttribute('src', '/files/foto-1.jpg');
+    expect(screen.getByTestId('miniatura-1')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByTestId('miniatura-0')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('AC1: con una sola foto no se muestran miniaturas', async () => {
+    getReporteMock.mockResolvedValue(reporte);
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByRole('img')).toHaveAttribute(
+      'src',
+      '/files/perro.jpg',
+    );
+    expect(screen.queryByTestId('galeria-miniaturas')).not.toBeInTheDocument();
+  });
+
+  it('AC1: en un reporte de pérdida muestra "Mascota perdida"', async () => {
+    getReporteMock.mockResolvedValue(reporte);
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByTestId('reporte-tipo')).toHaveTextContent(
+      'Mascota perdida',
+    );
+  });
+
+  it('AC1: en un reporte de hallazgo muestra "Mascota encontrada"', async () => {
+    getReporteMock.mockResolvedValue({
+      ...reporte,
+      tipo: TipoReporte.ENCONTRADA,
+      estado: EstadoReporte.ENCONTRADA,
+    });
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByTestId('reporte-tipo')).toHaveTextContent(
+      'Mascota encontrada',
+    );
+  });
+
+  it('AC2: sin fotografías muestra el mensaje de reemplazo y ninguna imagen', async () => {
+    getReporteMock.mockResolvedValue({ ...reporte, fotos: [] });
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByTestId('foto-placeholder')).toHaveTextContent(
+      /no tiene fotografías/i,
+    );
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('galeria-miniaturas')).not.toBeInTheDocument();
+  });
+
+  it('AC3: un 404 muestra "Reporte no encontrado" con enlace para volver al listado', async () => {
+    getReporteMock.mockRejectedValue(new ApiError(404, {}));
+
+    render(<ReporteDetalle id="no-existe" />);
+
+    expect(await screen.findByTestId('no-encontrado')).toHaveTextContent(
+      'Reporte no encontrado',
+    );
+    expect(
+      screen.getByRole('link', { name: /volver al listado/i }),
+    ).toHaveAttribute('href', '/');
   });
 });
