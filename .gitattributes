@@ -1,0 +1,9 @@
+# Normalizar según OS al checkout; forzar LF en archivos que Docker/CI leen
+# en Linux (evita el clásico problema CRLF -> "no such file or directory").
+* text=auto
+
+*.sh text eol=lf
+Dockerfile text eol=lf
+**/Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

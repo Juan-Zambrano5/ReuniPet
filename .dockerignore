@@ -1,0 +1,30 @@
+# Dependencias y builds locales (se instalan/compilan dentro de la imagen)
+node_modules
+**/node_modules
+**/dist
+apps/web/.next
+apps/web/.swc
+**/coverage
+
+# Entorno y datos locales (nunca al build context)
+.env
+**/.env
+.env.local
+**/.env.local
+uploads
+**/uploads
+
+# Repo e histórico
+.git
+.gitignore
+
+# Logs y basura
+*.log
+.eslintcache
+*.tsbuildinfo
+
+# Docs internos
+AGENTS.md
+SPRINT2_PLAN.md
+DISENO_Y_PROMPTS_SPRINT1.md
+DOCUMENTO_TECNICO.txt

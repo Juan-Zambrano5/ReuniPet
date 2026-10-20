@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-reunipet}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-reunipet}',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    # 5432 NO se publica al host para no chocar con un PostgreSQL local.
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Copiá .env.example a .env y revisá DATABASE_URL}
+      # Dentro del contenedor la API siempre escucha en 3001; PORT solo
+      # cambia el puerto publicado en el host.
+      PORT: '3001'
+    ports:
+      - '${PORT:-3001}:3001'
+    volumes:
+      # Fotos subidas: process.cwd()/uploads dentro del contenedor.
+      - uploads-data:/app/apps/api/uploads
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # URL que usa el NAVEGADOR para hablar con la API (host del machine,
+        # no el nombre del servicio Docker).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    ports:
+      - '3000:3000'
+    depends_on:
+      - api
+
+volumes:
+  db-data:
+  uploads-data:
