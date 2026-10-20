@@ -48,6 +48,13 @@ Hay dos formas de correr el proyecto:
    docker compose up --build
    ```
 
+   Para correrlo en segundo plano (los logs quedan accesibles con
+   `docker compose logs -f`):
+
+   ```bash
+   docker compose up -d --build
+   ```
+
    - La primera vez tarda unos minutos (baja imágenes y compila).
    - `db` tiene healthcheck; la API espera a que Postgres esté sano, aplica
      las migraciones (`prisma migrate deploy`), corre el seed (idempotente)
@@ -193,6 +200,20 @@ Abrí <http://localhost:3000> y probá crear un reporte.
 
 ---
 
+## Dónde está cada cosa
+
+| Qué | Dónde |
+|---|---|
+| Crear reporte de mascota **perdida** | `/reportar/perdida` (datos + fotos en 2 pasos) |
+| Crear reporte de mascota **encontrada** | `/reportar/encontrada` |
+| Alertas de coincidencia (Tus coincidencias) | `/alertas` |
+| **"Recientes en tu zona"** y los **filtros** (especie, raza, color, cerca de mí) | `/alertas`, bloque "Recientes en tu zona" |
+| Comparador de una coincidencia | `/comparador/<id>`; desde "Comparador Inteligente" del navbar abre la más reciente |
+| Detalle de un reporte y su foto | `/reportes/<id>` |
+| Mapa | `/mapa` (placeholder: "Disponible próximamente") |
+
+---
+
 ## Cómo correr los tests
 
 ### En un clon limpio
@@ -209,6 +230,10 @@ npm run build --workspace packages/shared
 # 3. Generar el cliente de Prisma
 npm run prisma:generate --workspace apps/api
 ```
+
+> **Nota:** la instalación puede imprimir varios `npm warn deprecated`
+> (glob, eslint 8, whatwg-encoding…). Son avisos de dependencias viejas de
+> paquetes transitivos: son normales, no son errores y no frenan nada.
 
 > **Nota:** si las suites fallan al arrancar con
 > `Cannot find module '@reunipet/shared'`, falta el paso 2: corré
@@ -229,11 +254,21 @@ fotografías y coincidencias al finalizar (`deleteMany` en los
 conservar: usá una base separada (por ejemplo `reunipet_test`).
 
 ```bash
-# 1. Crear la base de prueba (psql, pgAdmin o tu herramienta preferida)
-CREATE DATABASE reunipet_test;
+# 1. Crear la base de prueba. Opción con Docker (no requiere PostgreSQL
+#    instalado; usa el puerto 5433 para no chocar con un PostgreSQL local
+#    ni con el puerto del servicio db de docker-compose.yml):
+docker run --name reunipet-test-pg \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=reunipet_test \
+  -p 5433:5432 \
+  -d postgres:16-alpine
 
-# 2. Que apps/api/.env apunte a esa base
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/reunipet_test?schema=public"
+# Opción con PostgreSQL local (psql, pgAdmin o tu herramienta preferida):
+#   CREATE DATABASE reunipet_test;
+
+# 2. Que apps/api/.env apunte a esa base (5433 si usaste Docker;
+#    5432 si es tu PostgreSQL local)
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/reunipet_test?schema=public"
 
 # 3. Aplicar migraciones y seed (el seed crea el usuario demo,
 #    que varios e2e requieren)
@@ -242,6 +277,13 @@ npm run prisma:seed   --workspace apps/api
 
 # 4. Correr los e2e
 npm run test:e2e --workspace apps/api   # 57 tests
+```
+
+Al terminar, si usaste la opción con Docker, borrá el contenedor y su
+volumen:
+
+```bash
+docker rm -fv reunipet-test-pg
 ```
 
 ### Web — unit (sin base de datos)
