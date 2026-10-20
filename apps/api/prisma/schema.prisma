@@ -12,6 +12,8 @@ model Usuario {
   nombre    String
   email     String    @unique
   telefono  String?
+  // HU12 (Sprint 3): hash de la contraseña (scrypt). Nulo en el usuario demo.
+  passwordHash String?
   createdAt DateTime  @default(now())
   reportes  Reporte[]
   contactosSolicitados ContactoSolicitud[] @relation("ContactoSolicitante")

@@ -11,6 +11,7 @@ const user: Usuario = {
   nombre: 'Demo',
   email: 'demo@reunipet.app',
   telefono: null,
+  passwordHash: null,
   createdAt: new Date(),
 };
 
