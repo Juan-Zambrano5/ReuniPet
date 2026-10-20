@@ -13,6 +13,14 @@ FROM deps AS build
 COPY packages/shared packages/shared
 RUN npm run build --workspace packages/shared
 COPY apps/api apps/api
+# openssl ANTES de `prisma generate`: si falta, el cliente se genera para
+# "debian-openssl-1.1.x" y en la imagen final (que sí tiene openssl 3.0.x)
+# Prisma no encuentra el Query Engine y el seed revienta. Instalarlo acá
+# hace que el cliente se genere para "debian-openssl-3.0.x", igual que en
+# runtime.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 # El cliente de Prisma generado no viaja en el repo: hay que generarlo
 # antes de compilar la API (el código importa tipos de @prisma/client).
 RUN npm run prisma:generate --workspace apps/api
@@ -33,6 +41,12 @@ COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY --from=build /app/apps/api/tsconfig.json ./apps/api/
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
+# OpenSSL: Prisma detecta la versión de libssl para elegir su engine
+# criptográfico; bookworm-slim no la trae y avisa "failed to detect the
+# libssl/openssl version". Instalarlo en la imagen final elimina el aviso.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/apps/api
 EXPOSE 3001
