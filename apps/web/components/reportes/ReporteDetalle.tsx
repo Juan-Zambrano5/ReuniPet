@@ -6,7 +6,7 @@ import { EstadoReporte, ReporteResponse } from '@reunipet/shared';
 import { ErrorText } from '@/components/ErrorText';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { ApiError, fotoUrl, getReporte } from '@/lib/api';
+import { ApiError, cambiarEstadoReporte, fotoUrl, getReporte } from '@/lib/api';
 import { tiempoRelativo } from '@/lib/tiempo';
 
 const BADGE: Record<
@@ -28,6 +28,9 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
   const [error, setError] = React.useState<string | null>(null);
   const [noEncontrado, setNoEncontrado] = React.useState(false);
   const [fotoIndex, setFotoIndex] = React.useState(0);
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [guardando, setGuardando] = React.useState(false);
+  const [errorEstado, setErrorEstado] = React.useState<string | null>(null);
 
   const regresar = React.useCallback(() => {
     if (typeof window !== 'undefined' && window.history.length > 1) {
@@ -37,12 +40,38 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
     window.location.href = '/';
   }, []);
 
+  // HU11: marcar como recuperada. El PATCH no trae fotos, así que solo se
+  // actualizan estado y updatedAt del reporte en pantalla (ajuste aprobado).
+  const marcarRecuperada = React.useCallback(async () => {
+    if (!reporte) return;
+    setGuardando(true);
+    setErrorEstado(null);
+    try {
+      const actualizado = await cambiarEstadoReporte(
+        reporte.id,
+        EstadoReporte.RECUPERADA,
+      );
+      setReporte((prev) =>
+        prev
+          ? { ...prev, estado: actualizado.estado, updatedAt: actualizado.updatedAt }
+          : prev,
+      );
+      setConfirmando(false);
+    } catch {
+      setErrorEstado('No se pudo actualizar el estado del reporte.');
+    } finally {
+      setGuardando(false);
+    }
+  }, [reporte]);
+
   React.useEffect(() => {
     let cancelado = false;
     setLoading(true);
     setError(null);
     setNoEncontrado(false);
     setFotoIndex(0);
+    setConfirmando(false);
+    setErrorEstado(null);
     void (async () => {
       try {
         const datos = await getReporte(id);
@@ -239,6 +268,66 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
           </dl>
         </div>
       </div>
+
+      {/* HU11: el panel de estado se muestra solo al propietario. */}
+      {reporte.esPropietario && (
+        <div
+          className="mt-6 rounded-card border border-border bg-card p-4 shadow-card"
+          data-testid="panel-estado"
+        >
+          <p className="text-sm font-semibold text-text">Estado de tu reporte</p>
+
+          {reporte.estado !== EstadoReporte.RECUPERADA ? (
+            confirmando ? (
+              <div
+                className="mt-3 rounded border border-border bg-surface p-3"
+                data-testid="confirmacion-recuperada"
+              >
+                <p className="text-sm text-text">
+                  ¿Marcar tu mascota como recuperada? El reporte dejará de
+                  aparecer en los listados públicos y no generará nuevas
+                  alertas.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      void marcarRecuperada();
+                    }}
+                    disabled={guardando}
+                    data-testid="btn-confirmar-recuperada"
+                  >
+                    {guardando ? 'Guardando...' : 'Sí, marcar como recuperada'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setConfirmando(false)}
+                    disabled={guardando}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+                {errorEstado && <ErrorText>{errorEstado}</ErrorText>}
+              </div>
+            ) : (
+              <Button
+                type="button"
+                className="mt-3"
+                onClick={() => setConfirmando(true)}
+                data-testid="btn-marcar-recuperada"
+              >
+                Marcar como recuperada
+              </Button>
+            )
+          ) : (
+            <p className="mt-2 text-sm text-muted" data-testid="estado-recuperada">
+              Este reporte está marcado como recuperado. Ya no aparece en los
+              listados públicos.
+            </p>
+          )}
+        </div>
+      )}
 
       <Button
         type="button"

@@ -11,7 +11,11 @@ export class AlertasService {
     const coincidencias = await this.prisma.coincidencia.findMany({
       where: {
         estado: { in: [EstadoCoincidencia.PENDIENTE, EstadoCoincidencia.VISTA] },
-        reportePerdida: { propietarioId: userId },
+        // HU11: se excluyen las coincidencias que involucran reportes
+        // RECUPERADA. Se filtra AL CONSULTAR (sin tocar datos), para que
+        // reabrir un reporte devuelva sus alertas de forma reversible.
+        reportePerdida: { propietarioId: userId, estado: { not: 'RECUPERADA' } },
+        reporteEncontrada: { estado: { not: 'RECUPERADA' } },
       },
       include: {
         reportePerdida: true,

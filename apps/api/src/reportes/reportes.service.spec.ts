@@ -4,7 +4,7 @@ import { TipoReporte } from '@reunipet/shared';
 import { ReportesService } from './reportes.service';
 import { CreateReporteDto } from './dto/create-reporte.dto';
 import { MatchingService } from '../matching/matching.service';
-import { Usuario } from '@prisma/client';
+import { EstadoReporte, Usuario } from '@prisma/client';
 
 const user: Usuario = {
   id: 'user-1',
@@ -702,6 +702,82 @@ describe('ReportesService', () => {
         where: { id: 'rep-9' },
         data: { latitud: 11, longitud: -67 },
       });
+    });
+  });
+
+  describe('HU11/HU14 — estado del reporte', () => {
+    const now = new Date('2026-10-01T12:00:00.000Z');
+    const reportePerdida = {
+      id: 'rep-e1',
+      tipo: 'PERDIDA',
+      especie: 'Perro',
+      raza: null,
+      color: 'negro',
+      caracteristicasDistintivas: 'collar',
+      ubicacion: null,
+      latitud: null,
+      longitud: null,
+      estado: 'PERDIDA',
+      propietarioId: user.id,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    it('HU11 AC1: el propietario marca su reporte como RECUPERADA', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(reportePerdida);
+      prismaMock.reporte.update.mockResolvedValue({
+        ...reportePerdida,
+        estado: 'RECUPERADA',
+        updatedAt: new Date('2026-10-02T12:00:00.000Z'),
+      });
+
+      const result = await service.updateEstado(
+        'rep-e1',
+        EstadoReporte.RECUPERADA,
+        user,
+      );
+
+      expect(prismaMock.reporte.update).toHaveBeenCalledWith({
+        where: { id: 'rep-e1' },
+        data: { estado: 'RECUPERADA' },
+      });
+      expect(result.estado).toBe('RECUPERADA');
+      expect(result.esPropietario).toBe(true);
+    });
+
+    it('HU11 AC3: un tercero no puede cambiar el estado (403) y nada se modifica', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        ...reportePerdida,
+        propietarioId: 'dueno-real',
+      });
+
+      await expect(
+        service.updateEstado('rep-e1', EstadoReporte.RECUPERADA, user),
+      ).rejects.toThrow('Solo el propietario puede actualizar el estado');
+      expect(prismaMock.reporte.update).not.toHaveBeenCalled();
+    });
+
+    it('HU11: reporte inexistente → 404', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateEstado('no-existe', EstadoReporte.RECUPERADA, user),
+      ).rejects.toThrow('Reporte no encontrado');
+      expect(prismaMock.reporte.update).not.toHaveBeenCalled();
+    });
+
+    it('ajuste aprobado: mismo estado que el actual → 200 idempotente, sin tocar datos', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(reportePerdida);
+
+      const result = await service.updateEstado(
+        'rep-e1',
+        EstadoReporte.PERDIDA,
+        user,
+      );
+
+      expect(prismaMock.reporte.update).not.toHaveBeenCalled();
+      expect(result.estado).toBe('PERDIDA');
+      expect(result.id).toBe('rep-e1');
     });
   });
 

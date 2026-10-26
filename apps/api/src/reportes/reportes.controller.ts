@@ -26,6 +26,7 @@ import { CurrentUserProvider } from '../usuarios/current-user.provider';
 import { MulterExceptionFilter } from '../common/multer-exception.filter';
 import { CreateReporteDto } from './dto/create-reporte.dto';
 import { ListReportesDto } from './dto/list-reportes.dto';
+import { UpdateEstadoDto } from './dto/update-estado.dto';
 import { UpdateUbicacionDto } from './dto/update-ubicacion.dto';
 import { FotosService } from './fotos.service';
 import { ReportesService } from './reportes.service';
@@ -111,5 +112,16 @@ export class ReportesController {
   ): Promise<ReporteResponse> {
     const user = await this.currentUser.getUser(req);
     return this.reportesService.updateUbicacion(id, dto, user);
+  }
+
+  // HU11/HU14: cambiar el estado del reporte (solo su propietario).
+  @Patch(':id/estado')
+  async updateEstado(
+    @Param('id') id: string,
+    @Body() dto: UpdateEstadoDto,
+    @Req() req: Request,
+  ): Promise<ReporteResponse> {
+    const user = await this.currentUser.getUser(req);
+    return this.reportesService.updateEstado(id, dto.estado, user);
   }
 }

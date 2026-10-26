@@ -50,7 +50,8 @@ describe('AlertasService (HU4)', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           estado: { in: ['PENDIENTE', 'VISTA'] },
-          reportePerdida: { propietarioId: 'user-1' },
+          reportePerdida: { propietarioId: 'user-1', estado: { not: 'RECUPERADA' } },
+          reporteEncontrada: { estado: { not: 'RECUPERADA' } },
         }),
       }),
     );
@@ -61,6 +62,16 @@ describe('AlertasService (HU4)', () => {
       reportePerdida: { id: 'per-1', especie: 'Perro' },
       reporteEncontrada: { id: 'enc-1', ubicacion: 'Parque Central' },
     });
+  });
+
+  it('HU11: el filtro excluye reportes RECUPERADA en AMBOS lados de la coincidencia', async () => {
+    prismaMock.coincidencia.findMany.mockResolvedValue([]);
+
+    await service.getAlertasDeUsuario('user-1');
+
+    const where = prismaMock.coincidencia.findMany.mock.calls[0][0].where;
+    expect(where.reportePerdida.estado).toEqual({ not: 'RECUPERADA' });
+    expect(where.reporteEncontrada.estado).toEqual({ not: 'RECUPERADA' });
   });
 
   it('AC3: marcarVista cambia el estado a VISTA', async () => {

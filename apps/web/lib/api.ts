@@ -2,6 +2,7 @@ import {
   AlertaResponse,
   ContactoPropietarioResponse,
   CreateReporteInput,
+  EstadoReporte,
   ListReportesResponse,
   ReporteResponse,
   TipoReporte,
@@ -49,6 +50,26 @@ export async function getReporte(id: string): Promise<ReporteResponse> {
   const res = await fetch(`${API_URL}/reportes/${id}`, {
     headers: getSessionHeaders(),
     cache: 'no-store',
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.json().catch(() => ({})));
+  }
+  return (await res.json()) as ReporteResponse;
+}
+
+// HU11/HU14: cambiar el estado del reporte (solo el propietario).
+// El backend responde sin fotos: el frontend actualiza SOLO estado/updatedAt.
+export async function cambiarEstadoReporte(
+  id: string,
+  estado: EstadoReporte,
+): Promise<Pick<ReporteResponse, 'id' | 'estado' | 'updatedAt'>> {
+  const res = await fetch(`${API_URL}/reportes/${id}/estado`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...getSessionHeaders(),
+    },
+    body: JSON.stringify({ estado }),
   });
   if (!res.ok) {
     throw new ApiError(res.status, await res.json().catch(() => ({})));

@@ -172,5 +172,30 @@ describe('MatchingService (HU5)', () => {
         where: { tipo: 'ENCONTRADA', estado: { not: 'RECUPERADA' } },
       });
     });
+
+    it('HU11: no compara un reporte RECUPERADA (sale sin buscar candidatos)', async () => {
+      const recuperada = makeReporte({ id: 'per-9', estado: 'RECUPERADA' });
+      prismaMock.reporte.findUnique.mockResolvedValue(recuperada);
+
+      await service.compararReporte('per-9');
+
+      expect(prismaMock.reporte.findMany).not.toHaveBeenCalled();
+      expect(prismaMock.coincidencia.create).not.toHaveBeenCalled();
+    });
+
+    it('HU11: los candidatos excluyen reportes RECUPERADA (regresión del filtro)', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(perdida);
+      prismaMock.reporte.findMany.mockResolvedValue([]);
+
+      await service.compararReporte('per-1');
+
+      expect(prismaMock.reporte.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            estado: { not: 'RECUPERADA' },
+          }),
+        }),
+      );
+    });
   });
 });

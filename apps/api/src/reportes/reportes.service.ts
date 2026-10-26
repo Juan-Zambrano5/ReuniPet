@@ -106,6 +106,53 @@ export class ReportesService {
   }
 
   /**
+   * HU11/HU14: cambia el estado del reporte (solo su propietario).
+   * Transiciones válidas por tipo: PERDIDA ⇄ RECUPERADA,
+   * ENCONTRADA ⇄ RECUPERADA. El mismo estado que el actual es
+   * idempotente (200 sin cambios; ajuste aprobado en el Prompt 0).
+   */
+  async updateEstado(
+    id: string,
+    nuevoEstado: EstadoReporte,
+    user: Usuario,
+  ): Promise<ReporteResponse> {
+    const reporte = await this.prisma.reporte.findUnique({ where: { id } });
+    if (!reporte) {
+      throw new NotFoundException('Reporte no encontrado');
+    }
+    if (reporte.propietarioId !== user.id) {
+      throw new ForbiddenException(
+        'Solo el propietario puede actualizar el estado',
+      );
+    }
+
+    if (reporte.estado === nuevoEstado) {
+      return this.toResponse(reporte, user.id);
+    }
+
+    const estadoActivo: EstadoReporte =
+      reporte.tipo === 'PERDIDA'
+        ? EstadoReporte.PERDIDA
+        : EstadoReporte.ENCONTRADA;
+    const permitidos = new Set<EstadoReporte>([
+      estadoActivo,
+      EstadoReporte.RECUPERADA,
+    ]);
+    if (!permitidos.has(nuevoEstado)) {
+      throw new BadRequestException(
+        `Estado no válido para un reporte de tipo ${reporte.tipo}`,
+      );
+    }
+
+    const actualizado = await this.prisma.reporte.update({
+      where: { id },
+      data: { estado: nuevoEstado },
+    });
+
+    return this.toResponse(actualizado, user.id);
+  }
+
+  /**
    * HU10 AC1/AC2: nombre + medio de contacto del propietario del reporte.
    * Cada solicitud queda registrada (quién la pidió y cuándo).
    */
