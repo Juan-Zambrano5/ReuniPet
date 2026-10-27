@@ -3,6 +3,7 @@ import { validate } from 'class-validator';
 import { TipoReporte } from '@reunipet/shared';
 import { ReportesService } from './reportes.service';
 import { CreateReporteDto } from './dto/create-reporte.dto';
+import { UpdateEstadoDto } from './dto/update-estado.dto';
 import { MatchingService } from '../matching/matching.service';
 import { EstadoReporte, Usuario } from '@prisma/client';
 
@@ -722,6 +723,12 @@ describe('ReportesService', () => {
       createdAt: now,
       updatedAt: now,
     };
+    const reporteEncontrada = {
+      ...reportePerdida,
+      id: 'rep-e2',
+      tipo: 'ENCONTRADA',
+      estado: 'ENCONTRADA',
+    };
 
     it('HU11 AC1: el propietario marca su reporte como RECUPERADA', async () => {
       prismaMock.reporte.findUnique.mockResolvedValue(reportePerdida);
@@ -778,6 +785,81 @@ describe('ReportesService', () => {
       expect(prismaMock.reporte.update).not.toHaveBeenCalled();
       expect(result.estado).toBe('PERDIDA');
       expect(result.id).toBe('rep-e1');
+    });
+
+    it('HU14: un reporte RECUPERADA de tipo PERDIDA se reabre a PERDIDA', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        ...reportePerdida,
+        estado: 'RECUPERADA',
+      });
+      prismaMock.reporte.update.mockResolvedValue({
+        ...reportePerdida,
+        estado: 'PERDIDA',
+      });
+
+      const result = await service.updateEstado(
+        'rep-e1',
+        EstadoReporte.PERDIDA,
+        user,
+      );
+
+      expect(prismaMock.reporte.update).toHaveBeenCalledWith({
+        where: { id: 'rep-e1' },
+        data: { estado: 'PERDIDA' },
+      });
+      expect(result.estado).toBe('PERDIDA');
+    });
+
+    it('HU14: un reporte ENCONTRADA pasa a RECUPERADA y de vuelta a ENCONTRADA', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(reporteEncontrada);
+      prismaMock.reporte.update.mockResolvedValue({
+        ...reporteEncontrada,
+        estado: 'RECUPERADA',
+      });
+
+      const recuperada = await service.updateEstado(
+        'rep-e2',
+        EstadoReporte.RECUPERADA,
+        user,
+      );
+      expect(recuperada.estado).toBe('RECUPERADA');
+
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        ...reporteEncontrada,
+        estado: 'RECUPERADA',
+      });
+      prismaMock.reporte.update.mockResolvedValue(reporteEncontrada);
+
+      const reabierta = await service.updateEstado(
+        'rep-e2',
+        EstadoReporte.ENCONTRADA,
+        user,
+      );
+      expect(reabierta.estado).toBe('ENCONTRADA');
+    });
+
+    it('HU14: "ENCONTRADA" no es válido para un reporte tipo PERDIDA (400)', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(reportePerdida);
+
+      await expect(
+        service.updateEstado('rep-e1', EstadoReporte.ENCONTRADA, user),
+      ).rejects.toThrow('Estado no válido para un reporte de tipo PERDIDA');
+      expect(prismaMock.reporte.update).not.toHaveBeenCalled();
+    });
+
+    it('HU14: "PERDIDA" no es válido para un reporte tipo ENCONTRADA (400)', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(reporteEncontrada);
+
+      await expect(
+        service.updateEstado('rep-e2', EstadoReporte.PERDIDA, user),
+      ).rejects.toThrow('Estado no válido para un reporte de tipo ENCONTRADA');
+      expect(prismaMock.reporte.update).not.toHaveBeenCalled();
+    });
+
+    it('HU14: el DTO rechaza estados fuera del enum', async () => {
+      const dto = plainToInstance(UpdateEstadoDto, { estado: 'VOLANDO' });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'estado')).toBe(true);
     });
   });
 

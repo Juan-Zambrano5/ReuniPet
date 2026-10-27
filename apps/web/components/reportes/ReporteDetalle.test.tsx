@@ -303,3 +303,104 @@ describe('ReporteDetalle (HU11)', () => {
     expect(screen.getByTestId('btn-confirmar-recuperada')).toBeInTheDocument();
   });
 });
+
+describe('ReporteDetalle (HU14)', () => {
+  const duenoRecuperada: ReporteResponse = {
+    ...reporte,
+    esPropietario: true,
+    estado: EstadoReporte.RECUPERADA,
+  };
+
+  beforeEach(() => {
+    getReporteMock.mockReset();
+    cambiarEstadoReporteMock.mockReset();
+  });
+
+  it('un reporte RECUPERADA del propietario muestra el botón "Reabrir reporte"', async () => {
+    getReporteMock.mockResolvedValue(duenoRecuperada);
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByTestId('btn-reabrir')).toBeInTheDocument();
+    expect(screen.getByTestId('estado-recuperada')).toHaveTextContent(
+      /no aparece en los listados/i,
+    );
+  });
+
+  it('reabrir pide confirmación y cancelar no llama al API', async () => {
+    getReporteMock.mockResolvedValue(duenoRecuperada);
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    fireEvent.click(await screen.findByTestId('btn-reabrir'));
+    expect(screen.getByTestId('confirmacion-reabrir')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.queryByTestId('confirmacion-reabrir')).not.toBeInTheDocument();
+    expect(cambiarEstadoReporteMock).not.toHaveBeenCalled();
+  });
+
+  it('al confirmar, un reporte PERDIDA vuelve a PERDIDA conservando los datos', async () => {
+    getReporteMock.mockResolvedValue(duenoRecuperada);
+    cambiarEstadoReporteMock.mockResolvedValue({
+      id: 'rep-1',
+      estado: EstadoReporte.PERDIDA,
+      updatedAt: '2026-10-03T10:00:00.000Z',
+    });
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    fireEvent.click(await screen.findByTestId('btn-reabrir'));
+    fireEvent.click(screen.getByTestId('btn-confirmar-reabrir'));
+
+    expect(await screen.findByTestId('btn-marcar-recuperada')).toBeInTheDocument();
+    expect(cambiarEstadoReporteMock).toHaveBeenCalledWith(
+      'rep-1',
+      EstadoReporte.PERDIDA,
+    );
+    expect(screen.getByTestId('status-badge')).toHaveTextContent('PERDIDO');
+    expect(screen.getByText('negro')).toBeInTheDocument();
+    expect(screen.getByText('collar rojo')).toBeInTheDocument();
+  });
+
+  it('un reporte ENCONTRADA recuperado se reabre como ENCONTRADA', async () => {
+    getReporteMock.mockResolvedValue({
+      ...duenoRecuperada,
+      tipo: TipoReporte.ENCONTRADA,
+    });
+    cambiarEstadoReporteMock.mockResolvedValue({
+      id: 'rep-1',
+      estado: EstadoReporte.ENCONTRADA,
+      updatedAt: '2026-10-03T10:00:00.000Z',
+    });
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    fireEvent.click(await screen.findByTestId('btn-reabrir'));
+    fireEvent.click(screen.getByTestId('btn-confirmar-reabrir'));
+
+    expect(await screen.findByTestId('status-badge')).toHaveTextContent(
+      'ENCONTRADO',
+    );
+    expect(cambiarEstadoReporteMock).toHaveBeenCalledWith(
+      'rep-1',
+      EstadoReporte.ENCONTRADA,
+    );
+  });
+
+  it('si el API falla al reabrir, se muestra un error y el reporte sigue recuperado', async () => {
+    getReporteMock.mockResolvedValue(duenoRecuperada);
+    cambiarEstadoReporteMock.mockRejectedValue(new ApiError(403, {}));
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    fireEvent.click(await screen.findByTestId('btn-reabrir'));
+    fireEvent.click(screen.getByTestId('btn-confirmar-reabrir'));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /no se pudo actualizar el estado/i,
+    );
+    expect(screen.getByTestId('status-badge')).toHaveTextContent('RECUPERADO');
+  });
+});

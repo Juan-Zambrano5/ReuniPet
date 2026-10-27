@@ -2,7 +2,11 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { EstadoReporte, ReporteResponse } from '@reunipet/shared';
+import {
+  EstadoReporte,
+  ReporteResponse,
+  TipoReporte,
+} from '@reunipet/shared';
 import { ErrorText } from '@/components/ErrorText';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -40,29 +44,36 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
     window.location.href = '/';
   }, []);
 
-  // HU11: marcar como recuperada. El PATCH no trae fotos, así que solo se
-  // actualizan estado y updatedAt del reporte en pantalla (ajuste aprobado).
-  const marcarRecuperada = React.useCallback(async () => {
-    if (!reporte) return;
-    setGuardando(true);
-    setErrorEstado(null);
-    try {
-      const actualizado = await cambiarEstadoReporte(
-        reporte.id,
-        EstadoReporte.RECUPERADA,
-      );
-      setReporte((prev) =>
-        prev
-          ? { ...prev, estado: actualizado.estado, updatedAt: actualizado.updatedAt }
-          : prev,
-      );
-      setConfirmando(false);
-    } catch {
-      setErrorEstado('No se pudo actualizar el estado del reporte.');
-    } finally {
-      setGuardando(false);
-    }
-  }, [reporte]);
+  // HU11/HU14: cambiar el estado del reporte. El PATCH no trae fotos, así
+  // que solo se actualizan estado y updatedAt en pantalla (ajuste aprobado).
+  const cambiarA = React.useCallback(
+    async (nuevoEstado: EstadoReporte) => {
+      if (!reporte) return;
+      setGuardando(true);
+      setErrorEstado(null);
+      try {
+        const actualizado = await cambiarEstadoReporte(
+          reporte.id,
+          nuevoEstado,
+        );
+        setReporte((prev) =>
+          prev
+            ? {
+                ...prev,
+                estado: actualizado.estado,
+                updatedAt: actualizado.updatedAt,
+              }
+            : prev,
+        );
+        setConfirmando(false);
+      } catch {
+        setErrorEstado('No se pudo actualizar el estado del reporte.');
+      } finally {
+        setGuardando(false);
+      }
+    },
+    [reporte],
+  );
 
   React.useEffect(() => {
     let cancelado = false;
@@ -292,7 +303,7 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
                   <Button
                     type="button"
                     onClick={() => {
-                      void marcarRecuperada();
+                      void cambiarA(EstadoReporte.RECUPERADA);
                     }}
                     disabled={guardando}
                     data-testid="btn-confirmar-recuperada"
@@ -321,10 +332,59 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
               </Button>
             )
           ) : (
-            <p className="mt-2 text-sm text-muted" data-testid="estado-recuperada">
-              Este reporte está marcado como recuperado. Ya no aparece en los
-              listados públicos.
-            </p>
+            <div className="mt-2" data-testid="estado-recuperada">
+              <p className="text-sm text-muted">
+                Este reporte está marcado como recuperado. Ya no aparece en los
+                listados públicos.
+              </p>
+              {confirmando ? (
+                <div
+                  className="mt-3 rounded border border-border bg-surface p-3"
+                  data-testid="confirmacion-reabrir"
+                >
+                  <p className="text-sm text-text">
+                    ¿Reabrir el reporte? Volverá a aparecer en los listados
+                    públicos y se reanudarán las alertas de coincidencias.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        // HU14: reabrir vuelve al estado activo según el tipo.
+                        void cambiarA(
+                          reporte.tipo === TipoReporte.PERDIDA
+                            ? EstadoReporte.PERDIDA
+                            : EstadoReporte.ENCONTRADA,
+                        );
+                      }}
+                      disabled={guardando}
+                      data-testid="btn-confirmar-reabrir"
+                    >
+                      {guardando ? 'Guardando...' : 'Sí, reabrir'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setConfirmando(false)}
+                      disabled={guardando}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                  {errorEstado && <ErrorText>{errorEstado}</ErrorText>}
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => setConfirmando(true)}
+                  data-testid="btn-reabrir"
+                >
+                  Reabrir reporte
+                </Button>
+              )}
+            </div>
           )}
         </div>
       )}
