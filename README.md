@@ -298,7 +298,12 @@ npm run test --workspace apps/web    # 49 tests
 ```bash
 npm test    # api (unit) + web + shared (no tiene tests)
 npm run lint
+npm run typecheck    # tsc --noEmit en shared + api + web (INCLUYE los archivos de test)
 ```
+
+> **Importante:** corré `npm run typecheck` después de tocar código o tests.
+> `next build` y `nest build` no revisan los archivos de prueba, así que un
+> error de tipos en un `.test.tsx` o `.spec.ts` solo lo detecta este chequeo.
 
 Total: **165 tests** (api unit 59 + e2e 57 + web 49).
 
@@ -312,6 +317,7 @@ Total: **165 tests** (api unit 59 + e2e 57 + web 49).
 | `npm run dev:web` | Frontend en dev (Next.js), puerto 3000 |
 | `npm run build` | Compila shared → api → web |
 | `npm test` | Tests de todos los workspaces |
+| `npm run typecheck` | Chequeo de tipos (`tsc --noEmit`) incluyendo tests |
 | `npm run lint` | Lint de todos los workspaces |
 | `npm run format` | Formatea con Prettier |
 

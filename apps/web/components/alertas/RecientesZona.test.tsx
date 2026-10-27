@@ -1,6 +1,10 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { ListReportesResponse, TipoReporte } from '@reunipet/shared';
+import {
+  EstadoReporte,
+  ListReportesResponse,
+  TipoReporte,
+} from '@reunipet/shared';
 import { RecientesZona } from '@/components/alertas/RecientesZona';
 import { getReportes } from '@/lib/api';
 
@@ -36,7 +40,7 @@ const reportes: ListReportesResponse = {
       raza: 'Labrador',
       color: 'negro',
       caracteristicasDistintivas: 'collar rojo',
-      estado: 'PERDIDA',
+      estado: EstadoReporte.PERDIDA,
       ubicacion: 'Parque Central',
       latitud: null,
       longitud: null,
@@ -58,7 +62,7 @@ const reportes: ListReportesResponse = {
       raza: null,
       color: 'blanco',
       caracteristicasDistintivas: 'oreja cortada',
-      estado: 'PERDIDA',
+      estado: EstadoReporte.PERDIDA,
       ubicacion: 'Av. Central',
       latitud: null,
       longitud: null,
@@ -153,7 +157,7 @@ describe('RecientesZona (HU6)', () => {
           raza: null,
           color: 'amarillo',
           caracteristicasDistintivas: 'pico roto',
-          estado: 'ENCONTRADA',
+          estado: EstadoReporte.ENCONTRADA,
           ubicacion: 'Calle 5',
           latitud: null,
           longitud: null,
