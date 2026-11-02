@@ -1,12 +1,24 @@
 'use client';
 
 import * as React from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Camera, ImageIcon, PawPrint, Trash2 } from 'lucide-react';
+import { FotografiaResponse } from '@reunipet/shared';
 import { ErrorText } from '@/components/ErrorText';
 import { StepBadge } from '@/components/ui/StepBadge';
 import { Button } from '@/components/ui/button';
-import { ApiError, API_URL, getSessionHeaders, getReporte } from '@/lib/api';
+import {
+  ApiError,
+  API_URL,
+  createReporte,
+  getSessionHeaders,
+} from '@/lib/api';
+import {
+  BorradorReporte,
+  guardarBorrador,
+  leerBorrador,
+  limpiarBorrador,
+} from '@/lib/borrador';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -27,19 +39,51 @@ function validateFile(file: File): string | null {
   return null;
 }
 
+function mensajeDeError(err: unknown): string {
+  if (err instanceof ApiError) {
+    const body = err.body as { message?: string | string[] } | undefined;
+    if (Array.isArray(body?.message)) return body.message.join(', ');
+    if (body?.message) return body.message;
+    return 'el servidor rechazó la imagen';
+  }
+  return 'sin conexión con el servidor';
+}
+
+/**
+ * Paso 2 de 2 del reporte de mascota perdida (HU1).
+ *
+ * Aquí se crea el reporte por primera vez: "Publicar reporte" hace
+ * POST /reportes con los datos del borrador del paso 1 y, solo si la
+ * creación sale bien, sube las fotos (opcionales) de una en una. Cualquier
+ * fallo conserva lo escrito y las fotos seleccionadas.
+ */
 export function FotosCarga(): React.JSX.Element {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const reporteId = searchParams.get('id');
 
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const [guardadas, setGuardadas] = React.useState<number | null>(null);
-  const [pending, setPending] = React.useState<PendingFoto[]>([]);
+  const iniciadoRef = React.useRef(false);
+
+  // null = todavía no se leyó el borrador (o no existe).
+  const [borrador, setBorrador] = React.useState<BorradorReporte | null>(null);
+  const [guardadas, setGuardadas] = React.useState<FotografiaResponse[]>([]);
+  const [pendientes, setPendientes] = React.useState<PendingFoto[]>([]);
   const [error, setError] = React.useState<string | null>(null);
-  const [cargandoReporte, setCargandoReporte] = React.useState(true);
   const [publicando, setPublicando] = React.useState(false);
   const previewsRef = React.useRef<Map<string, string>>(new Map());
+
+  // Sin datos del paso 1 no hay nada que publicar: redirige al paso 1.
+  // El ref garantiza que el efecto corre una sola vez aunque el mock de
+  // router devuelva un objeto nuevo en cada render.
+  React.useEffect(() => {
+    if (iniciadoRef.current) return;
+    iniciadoRef.current = true;
+    const datos = leerBorrador();
+    if (!datos) {
+      router.replace('/reportar/perdida');
+      return;
+    }
+    setBorrador(datos);
+  }, [router]);
 
   React.useEffect(() => {
     const urls = previewsRef.current;
@@ -47,28 +91,6 @@ export function FotosCarga(): React.JSX.Element {
       for (const url of urls.values()) URL.revokeObjectURL(url);
     };
   }, []);
-
-  React.useEffect(() => {
-    if (!reporteId) {
-      setCargandoReporte(false);
-      setError('Falta el id del reporte. Vuelve al paso 1.');
-      return;
-    }
-    let cancelado = false;
-    void (async () => {
-      try {
-        const reporte = await getReporte(reporteId);
-        if (!cancelado) setGuardadas(reporte.fotos?.length ?? 0);
-      } catch {
-        if (!cancelado) setGuardadas(0);
-      } finally {
-        if (!cancelado) setCargandoReporte(false);
-      }
-    })();
-    return () => {
-      cancelado = true;
-    };
-  }, [reporteId]);
 
   function handleFiles(fileList: FileList | null): void {
     if (!fileList) return;
@@ -86,12 +108,12 @@ export function FotosCarga(): React.JSX.Element {
       nuevos.push({ key, file, previewUrl });
     }
     if (nuevos.length > 0) {
-      setPending((prev) => [...prev, ...nuevos]);
+      setPendientes((prev) => [...prev, ...nuevos]);
     }
   }
 
   function removePending(key: string): void {
-    setPending((prev) => {
+    setPendientes((prev) => {
       const target = prev.find((p) => p.key === key);
       if (target) {
         URL.revokeObjectURL(target.previewUrl);
@@ -101,47 +123,97 @@ export function FotosCarga(): React.JSX.Element {
     });
   }
 
-  async function handlePublicar(): Promise<void> {
-    setError(null);
-    if (!reporteId) {
-      setError('Falta el id del reporte. Vuelve al paso 1.');
-      return;
+  /** Sube una foto; solo se quita de pendientes si el servidor la aceptó. */
+  async function subirFoto(
+    reporteId: string,
+    foto: PendingFoto,
+  ): Promise<FotografiaResponse[]> {
+    const formData = new FormData();
+    formData.append('fotos', foto.file);
+    const res = await fetch(`${API_URL}/reportes/${reporteId}/fotos`, {
+      method: 'POST',
+      headers: getSessionHeaders(),
+      body: formData,
+    });
+    if (!res.ok) {
+      const body: unknown = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, body);
     }
+    return (await res.json()) as FotografiaResponse[];
+  }
+
+  async function handlePublicar(): Promise<void> {
+    if (!borrador || publicando) return;
+    setError(null);
 
     setPublicando(true);
     try {
-      if (pending.length > 0) {
-        const formData = new FormData();
-        for (const { file } of pending) formData.append('fotos', file);
-        const res = await fetch(`${API_URL}/reportes/${reporteId}/fotos`, {
-          method: 'POST',
-          headers: getSessionHeaders(),
-          body: formData,
+      // 1) Crear el reporte solo si aún no existe (reintento tras un fallo
+      //    de foto: el id queda en el borrador para no duplicar).
+      let reporteId = borrador.reporteId;
+      if (!reporteId) {
+        const reporte = await createReporte({
+          tipo: borrador.tipo,
+          especie: borrador.especie.trim(),
+          raza: borrador.raza.trim() || undefined,
+          color: borrador.color.trim(),
+          caracteristicasDistintivas: borrador.caracteristicasDistintivas.trim(),
+          ubicacion: borrador.ubicacion.trim() || undefined,
+          latitud: borrador.latitud,
+          longitud: borrador.longitud,
         });
-        if (!res.ok) {
-          const body: unknown = await res.json().catch(() => ({}));
-          throw new ApiError(res.status, body);
-        }
-        for (const p of pending) {
-          URL.revokeObjectURL(p.previewUrl);
-          previewsRef.current.delete(p.key);
-        }
-        setPending([]);
+        reporteId = reporte.id;
+        const actualizado = { ...borrador, reporteId };
+        guardarBorrador(actualizado);
+        setBorrador(actualizado);
       }
-      router.push('/');
+
+      // 2) Subir fotos de una en una: el backend aborta con la primera
+      //    inválida, así un lote conjunto reintentaría fotos ya guardadas.
+      if (pendientes.length > 0) {
+        const fallidas: PendingFoto[] = [];
+        const motivos: string[] = [];
+        const subidas: FotografiaResponse[] = [];
+        for (const foto of pendientes) {
+          try {
+            const creadas = await subirFoto(reporteId, foto);
+            subidas.push(...creadas);
+            URL.revokeObjectURL(foto.previewUrl);
+            previewsRef.current.delete(foto.key);
+          } catch (err) {
+            fallidas.push(foto);
+            motivos.push(`${foto.file.name} (${mensajeDeError(err)})`);
+          }
+        }
+        if (subidas.length > 0) {
+          setGuardadas((prev) => [...prev, ...subidas]);
+        }
+        if (fallidas.length > 0) {
+          setPendientes(fallidas);
+          setError(
+            `El reporte está publicado, pero ${fallidas.length} foto(s) no se pudieron subir: ` +
+              `${motivos.join('; ')}. Puedes reintentar sin duplicar el reporte.`,
+          );
+          return;
+        }
+      }
+
+      // 3) Éxito completo: borrador limpio y al detalle del reporte.
+      limpiarBorrador();
+      router.push(`/reportes/${reporteId}`);
     } catch (err) {
-      // RNF-05: el reporte y las fotos ya guardadas no se pierden
+      // RNF-05: la creación falló; el borrador y las fotos siguen intactos.
       if (err instanceof ApiError) {
         const body = err.body as { message?: string | string[] } | undefined;
         setError(
           Array.isArray(body?.message)
             ? body.message.join(', ')
             : (body?.message ??
-              'No se pudieron guardar las fotografías. El reporte se mantiene publicado.'),
+              'No se pudo crear el reporte. Tus datos y fotos se conservan.'),
         );
       } else {
         setError(
-          'Error de conexión. Tus fotos seleccionadas se conservan y el reporte no se pierde.',
+          'Error de conexión con el servidor. Tus datos y fotos se conservan.',
         );
       }
     } finally {
@@ -149,7 +221,11 @@ export function FotosCarga(): React.JSX.Element {
     }
   }
 
-  const totalFotos = (guardadas ?? 0) + pending.length;
+  const totalFotos = guardadas.length + pendientes.length;
+  const sinBorrador = borrador === null;
+  // Caso 2 (HU1): el reporte ya fue creado en un intento anterior.
+  const reporteYaCreado = Boolean(borrador?.reporteId);
+  const reporteId = borrador?.reporteId ?? '';
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
@@ -165,11 +241,21 @@ export function FotosCarga(): React.JSX.Element {
           </h1>
 
           <div className="mt-6 rounded-card border border-border bg-card p-6 shadow-card">
-            <p className="text-sm font-semibold text-text" data-testid="fotos-count">
+            {sinBorrador ? (
+              <p className="text-sm text-muted" data-testid="cargando-borrador">
+                Cargando...
+              </p>
+            ) : (
+              <>
+            <p
+              className="text-sm font-semibold text-text"
+              data-testid="fotos-count"
+            >
               Fotos cargadas ({totalFotos})
             </p>
             <p className="mt-1 text-xs text-muted">
-              Formatos: JPG, PNG o WEBP — máximo 5MB cada una.
+              Formatos: JPG, PNG o WEBP — máximo 5MB cada una. Las fotos son
+              opcionales: puedes publicar solo con los datos del paso 1.
             </p>
 
             <button
@@ -198,26 +284,21 @@ export function FotosCarga(): React.JSX.Element {
               disabled={publicando}
             />
 
-            {cargandoReporte && (
-              <p className="mt-4 text-sm text-muted">Cargando reporte...</p>
-            )}
-
             {totalFotos > 0 && (
               <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4">
-                {(guardadas ?? 0) > 0 &&
-                  Array.from({ length: guardadas ?? 0 }).map((_, i) => (
-                    <div
-                      key={`guardada-${i}`}
-                      className="flex aspect-square flex-col items-center justify-center gap-1 rounded-card border border-border bg-success-bg-soft text-center"
-                      data-testid="thumb-guardada"
-                    >
-                      <ImageIcon className="h-5 w-5 text-success" aria-hidden />
-                      <span className="text-[10px] font-medium text-success">
-                        Guardada
-                      </span>
-                    </div>
-                  ))}
-                {pending.map((p) => (
+                {guardadas.map((foto) => (
+                  <div
+                    key={foto.id}
+                    className="flex aspect-square flex-col items-center justify-center gap-1 rounded-card border border-border bg-success-bg-soft text-center"
+                    data-testid="thumb-guardada"
+                  >
+                    <ImageIcon className="h-5 w-5 text-success" aria-hidden />
+                    <span className="text-[10px] font-medium text-success">
+                      Guardada
+                    </span>
+                  </div>
+                ))}
+                {pendientes.map((p) => (
                   <div
                     key={p.key}
                     className="relative aspect-square overflow-hidden rounded-card border border-border"
@@ -250,15 +331,35 @@ export function FotosCarga(): React.JSX.Element {
             )}
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <Button
-                type="button"
-                variant="secondary"
-                className="sm:flex-1"
-                onClick={() => router.push(pathname.replace(/\/fotos$/, ''))}
-                disabled={publicando}
-              >
-                Volver
-              </Button>
+              {reporteYaCreado ? (
+                // Caso 2 (HU1): el reporte ya existe. No se vuelve al paso 1
+                // (editar un reporte es HU17) ni se puede crear un segundo:
+                // la salida es ver el reporte ya publicado.
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="sm:flex-1"
+                  onClick={() => {
+                    limpiarBorrador();
+                    router.push(`/reportes/${reporteId}`);
+                  }}
+                  disabled={publicando}
+                  data-testid="omitar-fotos"
+                >
+                  Omitir fotos y ver mi reporte
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="sm:flex-1"
+                  onClick={() => router.push('/reportar/perdida')}
+                  disabled={publicando}
+                  data-testid="volver-paso-1"
+                >
+                  Volver
+                </Button>
+              )}
               <Button
                 type="button"
                 className="sm:flex-1"
@@ -266,9 +367,15 @@ export function FotosCarga(): React.JSX.Element {
                 disabled={publicando}
                 data-testid="publicar-reporte"
               >
-                {publicando ? 'Publicando...' : 'Publicar reporte'}
+                {publicando
+                  ? 'Publicando...'
+                  : reporteYaCreado
+                    ? 'Subir fotos'
+                    : 'Publicar reporte'}
               </Button>
             </div>
+              </>
+            )}
           </div>
         </div>
 

@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ReporteForm } from '@/components/reportes/ReporteForm';
 import { TipoReporte } from '@reunipet/shared';
+import { leerBorrador } from '@/lib/borrador';
 
 const push = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -10,6 +11,7 @@ jest.mock('next/navigation', () => ({
 
 beforeEach(() => {
   push.mockClear();
+  window.sessionStorage.clear();
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
     json: () =>
@@ -48,14 +50,17 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('HU1 CA: muestra ErrorText bajo campos vacíos y aún así envía al backend', async () => {
+  it('HU1 CA: muestra ErrorText bajo campos vacíos y NO navega ni llama al backend', async () => {
     render(<ReporteForm tipo={TipoReporte.PERDIDA} />);
     fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
 
     expect(await screen.findAllByTestId('error-text')).not.toHaveLength(0);
     expect(screen.getByText('La especie es obligatoria')).toBeInTheDocument();
     expect(screen.getByText('El color es obligatorio')).toBeInTheDocument();
-    expect(global.fetch).toHaveBeenCalled();
+    // El paso 1 solo valida y guarda borrador: nunca publica ni navega.
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    expect(leerBorrador()).toBeNull();
   });
 
   it('HU1: seleccionar una especie limpia el error de especie', async () => {
@@ -71,7 +76,7 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('HU1: tras crear el reporte navega al paso 2 (fotos) conservando el id', async () => {
+  it('HU1: Siguiente paso guarda el borrador y navega al paso 2 sin llamar a la API', async () => {
     render(<ReporteForm tipo={TipoReporte.PERDIDA} />);
     fireEvent.click(screen.getByRole('radio', { name: /perro/i }));
     fireEvent.change(screen.getByLabelText(/^color/i), {
@@ -82,8 +87,39 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
 
-    await screen.findByText('Publicando...');
-    expect(push).toHaveBeenCalledWith('/reportar/perdida/fotos?id=rep-test');
+    expect(push).toHaveBeenCalledWith('/reportar/perdida/fotos');
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    const borrador = leerBorrador();
+    expect(borrador).not.toBeNull();
+    expect(borrador?.especie).toBe('perro');
+    expect(borrador?.color).toBe('negro');
+    expect(borrador?.caracteristicasDistintivas).toBe('collar rojo');
+    expect(borrador?.reporteId).toBeUndefined();
+  });
+
+  it('HU1: al volver del paso 2 los campos vienen rellenados desde el borrador', () => {
+    window.sessionStorage.setItem(
+      'reunipet:borrador-reporte',
+      JSON.stringify({
+        tipo: 'PERDIDA',
+        especie: 'gato',
+        raza: 'siames',
+        color: 'crema',
+        caracteristicasDistintivas: 'orejas negras',
+        ubicacion: 'Parque Central',
+      }),
+    );
+
+    render(<ReporteForm tipo={TipoReporte.PERDIDA} />);
+
+    expect(screen.getByRole('radio', { name: /gato/i })).toBeChecked();
+    expect(screen.getByLabelText(/^raza/i)).toHaveValue('siames');
+    expect(screen.getByLabelText(/^color/i)).toHaveValue('crema');
+    expect(
+      screen.getByLabelText(/características distintivas/i),
+    ).toHaveValue('orejas negras');
+    expect(screen.getByLabelText(/^ubicación/i)).toHaveValue('Parque Central');
   });
 
   function completarCamposBasicos(): void {
@@ -103,7 +139,7 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
   }
 
   describe('HU9 — punto en el mapa', () => {
-    it('AC2: con punto marcado envía latitud y longitud al crear', async () => {
+    it('AC2: con punto marcado guarda latitud y longitud en el borrador', () => {
       render(
         <ReporteForm
           tipo={TipoReporte.PERDIDA}
@@ -113,21 +149,21 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
       completarCamposBasicos();
       fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
 
-      await screen.findByText('Publicando...');
-      const body = ultimoBodyEnviado();
-      expect(body.latitud).toBe(10.12);
-      expect(body.longitud).toBe(-66.99);
+      const borrador = leerBorrador();
+      expect(borrador?.latitud).toBe(10.12);
+      expect(borrador?.longitud).toBe(-66.99);
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('AC2: sin punto marcado no envía coordenadas', async () => {
+    it('AC2: sin punto marcado el borrador no guarda coordenadas', () => {
       render(<ReporteForm tipo={TipoReporte.PERDIDA} />);
       completarCamposBasicos();
       fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
 
-      await screen.findByText('Publicando...');
-      const body = ultimoBodyEnviado();
-      expect(body.latitud).toBeUndefined();
-      expect(body.longitud).toBeUndefined();
+      const borrador = leerBorrador();
+      expect(borrador?.latitud).toBeUndefined();
+      expect(borrador?.longitud).toBeUndefined();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('AC1: en ENCONTRADA el punto en el mapa sustituye a la dirección escrita', async () => {

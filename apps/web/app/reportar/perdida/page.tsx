@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { TipoReporte } from '@reunipet/shared';
 import { ReporteForm } from '@/components/reportes/ReporteForm';
 import {
@@ -9,9 +10,36 @@ import {
 } from '@/components/reportes/MapaSelector';
 import { StepBadge } from '@/components/ui/StepBadge';
 import { TipCard } from '@/components/ui/TipCard';
+import { leerBorrador } from '@/lib/borrador';
 
 export default function ReportarPerdidaPage(): React.JSX.Element {
+  const router = useRouter();
   const [punto, setPunto] = React.useState<PuntoMapa | null>(null);
+  // El router del mock se crea nuevo en cada render: el ref garantiza que
+  // este efecto corra una sola vez (evita bucles de redirección).
+  const iniciadoRef = React.useRef(false);
+
+  // HU1: al volver del paso 2 (o tras recargar) se restaura el punto marcado
+  // en el mapa, que vive en el mismo borrador que los campos del formulario.
+  // Caso 2: si el reporte YA se creó (reporteId en el borrador), el paso 1
+  // redirige al paso 2 — así también se cubre el botón Atrás del navegador
+  // y nunca se puede crear un segundo reporte desde aquí.
+  React.useEffect(() => {
+    if (iniciadoRef.current) return;
+    iniciadoRef.current = true;
+    const borrador = leerBorrador();
+    if (!borrador) return;
+    if (borrador.reporteId) {
+      router.replace('/reportar/perdida/fotos');
+      return;
+    }
+    if (
+      typeof borrador.latitud === 'number' &&
+      typeof borrador.longitud === 'number'
+    ) {
+      setPunto({ lat: borrador.latitud, lng: borrador.longitud });
+    }
+  }, [router]);
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">

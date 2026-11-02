@@ -1,10 +1,12 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ReportarPerdidaPage from '@/app/reportar/perdida/page';
+import { leerBorrador } from '@/lib/borrador';
 
 const push = jest.fn();
+const replace = jest.fn();
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace }),
 }));
 
 function stubRect(el: HTMLElement): void {
@@ -22,14 +24,10 @@ function stubRect(el: HTMLElement): void {
     }) as DOMRect;
 }
 
-function ultimoBody(): Record<string, unknown> {
-  const calls = (global.fetch as jest.Mock).mock.calls;
-  const init = calls[calls.length - 1][1] as RequestInit;
-  return JSON.parse(String(init.body)) as Record<string, unknown>;
-}
-
 beforeEach(() => {
   push.mockClear();
+  replace.mockClear();
+  window.sessionStorage.clear();
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
     json: () =>
@@ -38,7 +36,7 @@ beforeEach(() => {
 });
 
 describe('Página reportar/perdida (HU9 AC1/AC2)', () => {
-  it('permite marcar la última ubicación vista y la envía con el reporte', async () => {
+  it('permite marcar la última ubicación vista y la guarda en el borrador', () => {
     render(<ReportarPerdidaPage />);
 
     const mapa = screen.getByTestId('mapa-mock');
@@ -54,14 +52,16 @@ describe('Página reportar/perdida (HU9 AC1/AC2)', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
 
-    await screen.findByText('Publicando...');
-    const body = ultimoBody();
-    expect(body.latitud).toBeCloseTo(10.4, 5);
-    expect(body.longitud).toBeCloseTo(-66.85, 5);
-    expect(push).toHaveBeenCalledWith('/reportar/perdida/fotos?id=rep-perdida');
+    // El paso 1 no publica: solo guarda el borrador y avanza.
+    expect(push).toHaveBeenCalledWith('/reportar/perdida/fotos');
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    const borrador = leerBorrador();
+    expect(borrador?.latitud).toBeCloseTo(10.4, 5);
+    expect(borrador?.longitud).toBeCloseTo(-66.85, 5);
   });
 
-  it('el reporte se crea sin coordenadas si no se marca el mapa', async () => {
+  it('el borrador queda sin coordenadas si no se marca el mapa', () => {
     render(<ReportarPerdidaPage />);
 
     fireEvent.click(screen.getByRole('radio', { name: /gato/i }));
@@ -73,9 +73,59 @@ describe('Página reportar/perdida (HU9 AC1/AC2)', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
 
-    await screen.findByText('Publicando...');
-    const body = ultimoBody();
-    expect(body.latitud).toBeUndefined();
-    expect(body.longitud).toBeUndefined();
+    expect(global.fetch).not.toHaveBeenCalled();
+    const borrador = leerBorrador();
+    expect(borrador?.latitud).toBeUndefined();
+    expect(borrador?.longitud).toBeUndefined();
+  });
+
+  it('al volver del paso 2 restaura el punto marcado en el mapa', async () => {
+    window.sessionStorage.setItem(
+      'reunipet:borrador-reporte',
+      JSON.stringify({
+        tipo: 'PERDIDA',
+        especie: 'perro',
+        raza: '',
+        color: 'negro',
+        caracteristicasDistintivas: 'collar rojo',
+        ubicacion: '',
+        latitud: 10.42,
+        longitud: -66.9,
+      }),
+    );
+
+    render(<ReportarPerdidaPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mapa-coordenadas')).toHaveTextContent(
+        'Punto marcado: 10.42, -66.9',
+      );
+    });
+  });
+
+  it('caso 2: con reporteId en el borrador el paso 1 redirige al paso 2', async () => {
+    // El reporte ya se creó en un intento anterior (fallo de fotos, Atrás...).
+    window.sessionStorage.setItem(
+      'reunipet:borrador-reporte',
+      JSON.stringify({
+        tipo: 'PERDIDA',
+        especie: 'perro',
+        raza: '',
+        color: 'negro',
+        caracteristicasDistintivas: 'collar rojo',
+        ubicacion: 'Parque Central',
+        reporteId: 'rep-uno',
+      }),
+    );
+
+    render(<ReportarPerdidaPage />);
+
+    // replace (no push): vuelve a dejar el paso 1 sin crear nada nuevo.
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalledWith('/reportar/perdida/fotos');
+    });
+    expect(push).not.toHaveBeenCalled();
+    // Nunca un segundo reporte desde el paso 1.
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

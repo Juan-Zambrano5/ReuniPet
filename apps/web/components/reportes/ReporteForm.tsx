@@ -14,6 +14,7 @@ import {
   createReporte,
   extractFieldErrors,
 } from '@/lib/api';
+import { guardarBorrador, leerBorrador } from '@/lib/borrador';
 
 interface ReporteFormProps {
   tipo: TipoReporte;
@@ -74,6 +75,21 @@ export function ReporteForm({
   const boton =
     submitLabel ?? (esPerdida ? 'Siguiente paso' : 'Publicar reporte');
 
+  // HU1: al volver del paso 2 (o tras una recarga) se recuperan los datos
+  // guardados en el borrador. Solo aplica al flujo en 2 pasos (PERDIDA).
+  React.useEffect(() => {
+    if (!esPerdida) return;
+    const borrador = leerBorrador();
+    if (!borrador) return;
+    setForm({
+      especie: borrador.especie,
+      raza: borrador.raza,
+      color: borrador.color,
+      caracteristicasDistintivas: borrador.caracteristicasDistintivas,
+      ubicacion: borrador.ubicacion,
+    });
+  }, [esPerdida]);
+
   function updateField(field: keyof FormState, value: string): void {
     setForm((prev) => ({ ...prev, [field]: value }));
     setErrors((prev) => {
@@ -103,9 +119,29 @@ export function ReporteForm({
     const clientErrors = clientValidate(form, tipo, punto ?? null);
     setErrors(clientErrors);
 
+    // HU1 (paso 1 de 2): aquí NO se publica. Si hay errores de validación se
+    // queda en el paso 1; si todo está bien se guarda el borrador en el
+    // navegador y se navega al paso 2, que es quien crea el reporte.
+    if (esPerdida) {
+      if (Object.keys(clientErrors).length > 0) return;
+      guardarBorrador({
+        tipo,
+        especie: form.especie.trim(),
+        raza: form.raza.trim(),
+        color: form.color.trim(),
+        caracteristicasDistintivas: form.caracteristicasDistintivas.trim(),
+        ubicacion: form.ubicacion.trim(),
+        latitud: punto?.lat,
+        longitud: punto?.lng,
+      });
+      router.push('/reportar/perdida/fotos');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const reporte = await createReporte({
+      // Solo llega aquí el flujo ENCONTRADA: el PERDIDA ya retornó arriba.
+      await createReporte({
         tipo,
         especie: form.especie.trim(),
         raza: form.raza.trim() || undefined,
@@ -115,11 +151,7 @@ export function ReporteForm({
         latitud: punto?.lat,
         longitud: punto?.lng,
       });
-      if (esPerdida) {
-        router.push(`/reportar/perdida/fotos?id=${reporte.id}`);
-      } else {
-        router.push('/');
-      }
+      router.push('/');
     } catch (err) {
       if (err instanceof ApiError) {
         const fieldErrors = extractFieldErrors(err);
