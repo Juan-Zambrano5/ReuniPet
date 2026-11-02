@@ -358,4 +358,53 @@ describe('FotosCarga (paso 2 de 2 — HU1)', () => {
       expect(push).toHaveBeenCalledWith('/reportes/rep-uno');
     });
   });
+
+  it('HU2: sin fotos muestra la ilustración propia y el consejo aprobado', async () => {
+    guardarBorradorEnMemoria();
+    render(<FotosCarga />);
+
+    await screen.findByTestId('publicar-reporte');
+
+    // Sin fotos: ilustración SVG propia (nada de imágenes de terceros).
+    expect(
+      screen.getByTestId('vista-previa-ilustracion'),
+    ).toBeInTheDocument();
+    expect(screen.queryByAltText(/Vista previa de la foto en las alertas/)).not.toBeInTheDocument();
+
+    // Texto exacto del consejo (sin cifras ni promesas sobre IA/escaneo).
+    expect(screen.getByText('Fotos de Alta Calidad')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Las fotos nítidas, con buena luz y que muestren el rostro y las marcas particulares ayudan a otras personas a reconocer a tu mascota\./,
+      ),
+    ).toBeInTheDocument();
+    // Sin cifras inventadas ni promesas sobre IA/escaneo en el consejo.
+    const tip = screen.getByTestId('tip-card');
+    expect(tip).not.toHaveTextContent(/\d+%|IA|escaneo/i);
+  });
+
+  it('HU2: la vista previa muestra la foto seleccionada y luego la guardada', async () => {
+    guardarBorradorEnMemoria();
+    render(<FotosCarga />);
+
+    await screen.findByTestId('publicar-reporte');
+    // Pendiente: la ilustración se sustituye por la foto elegida.
+    agregarFoto();
+    const imgPendiente = screen.getByAltText(
+      'Vista previa de la foto en las alertas',
+    );
+    expect(imgPendiente).toHaveAttribute('src', 'blob:mock');
+    expect(
+      screen.queryByTestId('vista-previa-ilustracion'),
+    ).not.toBeInTheDocument();
+
+    // Publicada: pasa a mostrarse la foto ya guardada en el servidor.
+    fireEvent.click(screen.getByTestId('publicar-reporte'));
+    await waitFor(() => {
+      expect(push).toHaveBeenCalledWith('/reportes/rep-uno');
+    });
+    expect(
+      screen.getByAltText('Vista previa de la foto en las alertas'),
+    ).toHaveAttribute('src', '/uploads/fot-1.png');
+  });
 });

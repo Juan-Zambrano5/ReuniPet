@@ -2,10 +2,11 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { Camera, ImageIcon, PawPrint, Trash2 } from 'lucide-react';
+import { Camera, ImageIcon, Trash2 } from 'lucide-react';
 import { FotografiaResponse } from '@reunipet/shared';
 import { ErrorText } from '@/components/ErrorText';
 import { StepBadge } from '@/components/ui/StepBadge';
+import { TipCard } from '@/components/ui/TipCard';
 import { Button } from '@/components/ui/button';
 import {
   ApiError,
@@ -226,6 +227,9 @@ export function FotosCarga(): React.JSX.Element {
   // Caso 2 (HU1): el reporte ya fue creado en un intento anterior.
   const reporteYaCreado = Boolean(borrador?.reporteId);
   const reporteId = borrador?.reporteId ?? '';
+  // HU2: la vista previa muestra la primera foto guardada; si aún no hay
+  // ninguna, la primera pendiente; y sin fotos, una ilustración propia.
+  const fotoVistaPrevia = guardadas[0]?.url ?? pendientes[0]?.previewUrl ?? null;
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">
@@ -381,14 +385,44 @@ export function FotosCarga(): React.JSX.Element {
 
         <aside className="hidden md:block">
           <div className="flex flex-col items-center justify-center gap-3 rounded-card border border-border bg-card p-8 text-center shadow-card">
-            <span className="flex h-32 w-32 items-center justify-center rounded-full bg-primary-soft">
-              <PawPrint className="h-16 w-16 text-primary" aria-hidden />
+            <span
+              className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-primary-soft"
+              data-testid="vista-previa-foto"
+            >
+              {fotoVistaPrevia ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={fotoVistaPrevia}
+                  alt="Vista previa de la foto en las alertas"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                /* Ilustración propia (SVG, sin imágenes de terceros). */
+                <svg
+                  viewBox="0 0 64 64"
+                  role="img"
+                  aria-label="Ilustración de una pata: aún no hay fotos"
+                  className="h-16 w-16 text-primary"
+                  data-testid="vista-previa-ilustracion"
+                >
+                  <ellipse cx="32" cy="42" rx="13" ry="10" fill="currentColor" />
+                  <circle cx="17" cy="27" r="6" fill="currentColor" />
+                  <circle cx="27" cy="19" r="6" fill="currentColor" />
+                  <circle cx="38" cy="19" r="6" fill="currentColor" />
+                  <circle cx="48" cy="27" r="6" fill="currentColor" />
+                </svg>
+              )}
             </span>
             <p className="text-sm font-medium text-text">Foto de referencia</p>
             <p className="text-xs text-muted">
-              Así se verán tus fotos en las alertas de coincidencia.
+              Así se verá tu foto en las alertas de coincidencia.
             </p>
           </div>
+          <TipCard titulo="Fotos de Alta Calidad" className="mt-4">
+            Las fotos nítidas, con buena luz y que muestren el rostro y las
+            marcas particulares ayudan a otras personas a reconocer a tu
+            mascota.
+          </TipCard>
         </aside>
       </div>
     </div>
