@@ -1,4 +1,7 @@
 import type { Config } from 'tailwindcss';
+// Se importa como ESM (no require): el config se carga como módulo nativo
+// en algunas rutas del dev server y `require` no existe en ese scope.
+import tailwindcssAnimate from 'tailwindcss-animate';
 
 const config: Config = {
   darkMode: ['class'],
@@ -71,7 +74,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [tailwindcssAnimate],
 };
 
 export default config;
