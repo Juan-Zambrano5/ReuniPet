@@ -113,7 +113,7 @@ export default function AlertasPage(): React.JSX.Element {
               id={alerta.coincidenciaId}
               mensaje={`Tu mascota "${alerta.reportePerdida.especie} ${
                 alerta.reportePerdida.color
-              }" coincide en ${Math.round(alerta.score * 100)}% con un reporte encontrado`}
+              }" coincide en ${Math.round(alerta.score * 100)}% (según especie, raza y color) con un reporte encontrado`}
               descripcionReporte={descripcion(alerta)}
               tiempo={tiempoRelativo(alerta.createdAt)}
               onVer={() => handleVer(alerta)}

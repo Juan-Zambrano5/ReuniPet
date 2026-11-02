@@ -74,9 +74,9 @@ export default function ReportarPerdidaPage(): React.JSX.Element {
             </p>
           </div>
           <TipCard titulo="Consejo útil">
-            Usa fotos recientes y con buena luz. Incluye detalles como collar,
-            manchas o cicatrices: el Comparador Inteligente las usa para
-            proponer coincidencias.
+            Completa especie, raza y color con precisión: son los datos que
+            usamos para buscar coincidencias. Las características distintivas
+            ayudan a quien la encuentre a reconocerla.
           </TipCard>
         </aside>
       </div>

@@ -138,8 +138,9 @@ export default function ComparadorPage(): React.JSX.Element {
           Coincidencia Alta Detectada
         </h1>
         <p className="mt-2 max-w-xl text-sm text-muted">
-          Basado en especie, raza y color, encontramos una posible coincidencia
-          entre tu reporte perdido y un reporte de hallazgo reciente.
+          Este porcentaje mide cuánto coinciden la especie, la raza y el color
+          de los dos reportes. No comparamos fotografías: revisa los datos y
+          confirma con la persona antes de reunirte.
         </p>
       </div>
 
