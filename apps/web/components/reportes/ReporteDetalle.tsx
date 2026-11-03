@@ -161,8 +161,12 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
 
       <div className="mt-6 overflow-hidden rounded-card border border-border bg-card shadow-card">
         {/* HU13 AC2: sin fotos, un mensaje de reemplazo (nunca un espacio roto). */}
+        {/* La caja se adapta a la proporción de la foto (sin recortarla):
+            ancho completo en horizontales, hasta 70vh y centrada en verticales. */}
         <div
-          className="flex h-64 items-center justify-center bg-surface"
+          className={`flex items-center justify-center bg-surface ${
+            fotoActual ? '' : 'h-64'
+          }`}
           data-testid="galeria-principal"
         >
           {fotoActual ? (
@@ -170,7 +174,8 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
             <img
               src={fotoUrl(fotoActual.url)}
               alt={`Foto ${fotoIndex + 1} de ${reporte.especie}`}
-              className="h-full w-full object-cover"
+              className="block h-auto max-h-[70vh] w-auto max-w-full object-contain"
+              data-testid="foto-principal"
             />
           ) : (
             <div className="px-6 text-center" data-testid="foto-placeholder">

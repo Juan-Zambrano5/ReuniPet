@@ -171,6 +171,18 @@ describe('ReporteDetalle (HU13)', () => {
     expect(screen.queryByTestId('galeria-miniaturas')).not.toBeInTheDocument();
   });
 
+  it('AC1: la foto principal se adapta a su proporción y no se recorta', async () => {
+    getReporteMock.mockResolvedValue(reporte);
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    const img = await screen.findByTestId('foto-principal');
+    expect(img).toHaveClass('object-contain', 'h-auto', 'max-w-full');
+    expect(img).not.toHaveClass('object-cover');
+    // Con foto, la caja no tiene alto fijo: toma la altura de la imagen.
+    expect(screen.getByTestId('galeria-principal')).not.toHaveClass('h-64');
+  });
+
   it('AC1: en un reporte de pérdida muestra "Mascota perdida"', async () => {
     getReporteMock.mockResolvedValue(reporte);
 
