@@ -5,8 +5,9 @@ encontradas: los propietarios publican reportes con fotos, la comunidad los
 consulta con filtros y el sistema detecta posibles coincidencias y genera
 alertas.
 
-**Rama por defecto:** `main` — tiene el trabajo completo (Sprint 1 y Sprint 2)
-y es idéntica a `sprint2`; un clon normal ya trae todo.
+**Rama con el trabajo completo:** `sprint3` (Sprints 1, 2 y 3). `main` y
+`sprint2` solo tienen hasta el Sprint 2; para probar el Sprint 3 cloná con
+`git clone --branch sprint3 <url>` (o `git checkout sprint3`).
 
 Hay dos formas de correr el proyecto:
 
@@ -210,7 +211,9 @@ Abrí <http://localhost:3000> y probá crear un reporte.
 | Alertas de coincidencia (Tus coincidencias) | `/alertas` |
 | **"Recientes en tu zona"** y los **filtros** (especie, raza, color, cerca de mí) | `/alertas`, bloque "Recientes en tu zona" |
 | Comparador de una coincidencia | `/comparador/<id>`; desde "Comparador Inteligente" del navbar abre la más reciente |
-| Detalle de un reporte y su foto | `/reportes/<id>` |
+| Detalle de un reporte, sus fotos y (si es tuyo) el panel de estado: marcar como recuperada / reabrir | `/reportes/<id>` |
+| Registro de usuario ("Crear cuenta" en la barra) | `/registro` |
+| Mis reportes: todos tus reportes, su estado y posibles coincidencias | `/mis-reportes` |
 | Mapa | `/mapa` (placeholder: "Disponible próximamente") |
 
 ---
@@ -244,7 +247,7 @@ npm run prisma:generate --workspace apps/api
 ### API — unit (sin base de datos)
 
 ```bash
-npm run test --workspace apps/api    # 59 tests (todo mockeado)
+npm run test --workspace apps/api    # 88 tests (todo mockeado)
 ```
 
 ### API — e2e (necesita una base de datos de prueba)
@@ -277,7 +280,7 @@ npm run prisma:deploy --workspace apps/api
 npm run prisma:seed   --workspace apps/api
 
 # 4. Correr los e2e
-npm run test:e2e --workspace apps/api   # 57 tests
+npm run test:e2e --workspace apps/api   # 97 tests
 ```
 
 Al terminar, si usaste la opción con Docker, borrá el contenedor y su
@@ -290,7 +293,7 @@ docker rm -fv reunipet-test-pg
 ### Web — unit (sin base de datos)
 
 ```bash
-npm run test --workspace apps/web    # 49 tests
+npm run test --workspace apps/web    # 112 tests
 ```
 
 ### Todos los workspaces
@@ -305,7 +308,7 @@ npm run typecheck    # tsc --noEmit en shared + api + web (INCLUYE los archivos 
 > `next build` y `nest build` no revisan los archivos de prueba, así que un
 > error de tipos en un `.test.tsx` o `.spec.ts` solo lo detecta este chequeo.
 
-Total: **165 tests** (api unit 59 + e2e 57 + web 49).
+Total: **297 tests** al cierre del Sprint 3 (api unit 88 + e2e 97 + web 112). Al cierre del Sprint 2 eran 165.
 
 ## Comandos útiles (raíz)
 
