@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import sharp from 'sharp';
 import { FotosService, MAX_PHOTO_BYTES } from './fotos.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,6 +34,7 @@ describe('FotosService (HU2)', () => {
       reporte: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'rep-1',
+          propietarioId: 'u-1',
           fotos: [{ orden: 2 }],
         }),
       },
@@ -46,13 +47,21 @@ describe('FotosService (HU2)', () => {
     );
   });
 
+  it('HU2: quien no es propietario recibe 403 y no se guarda nada', async () => {
+    await expect(
+      service.addFotos('rep-1', [makeFile(PNG_1x1)], 'otro'),
+    ).rejects.toThrow(ForbiddenException);
+    expect(storageMock.save).not.toHaveBeenCalled();
+    expect(prismaMock.fotografia.create).not.toHaveBeenCalled();
+  });
+
   it('agrega fotos sin borrar las existentes (AC3) y continúa el orden', async () => {
     prismaMock.fotografia.create.mockImplementation(
       ({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({ id: 'f', ...data, createdAt: new Date() }),
     );
 
-    const result = await service.addFotos('rep-1', [makeFile(PNG_1x1)]);
+    const result = await service.addFotos('rep-1', [makeFile(PNG_1x1)], 'u-1');
 
     expect(storageMock.save).toHaveBeenCalledTimes(1);
     expect(prismaMock.fotografia.create).toHaveBeenCalledWith({
@@ -65,7 +74,7 @@ describe('FotosService (HU2)', () => {
 
   it('rechaza un archivo que no es imagen válida con 400 (AC2)', async () => {
     const fake = Buffer.from('esto no es una imagen, es texto plano');
-    await expect(service.addFotos('rep-1', [makeFile(fake, 'mal.txt')])).rejects.toThrow(
+    await expect(service.addFotos('rep-1', [makeFile(fake, 'mal.txt')], 'u-1')).rejects.toThrow(
       BadRequestException,
     );
     expect(storageMock.save).not.toHaveBeenCalled();
@@ -73,7 +82,7 @@ describe('FotosService (HU2)', () => {
 
   it('rechaza archivos mayores a 5MB (RNF-02)', async () => {
     const big = Buffer.concat([PNG_1x1, Buffer.alloc(MAX_PHOTO_BYTES)]);
-    await expect(service.addFotos('rep-1', [makeFile(big)])).rejects.toThrow(/5MB/);
+    await expect(service.addFotos('rep-1', [makeFile(big)], 'u-1')).rejects.toThrow(/5MB/);
   });
 
   it('redimensiona a un máximo de 1600px en el lado más largo (RNF-02)', async () => {
@@ -96,17 +105,17 @@ describe('FotosService (HU2)', () => {
       return '/files/resized.png';
     });
 
-    await service.addFotos('rep-1', [makeFile(grande)]);
+    await service.addFotos('rep-1', [makeFile(grande)], 'u-1');
     expect(storageMock.save).toHaveBeenCalledTimes(1);
   });
 
   it('devuelve 400 si no se envía ningún archivo', async () => {
-    await expect(service.addFotos('rep-1', [])).rejects.toThrow(BadRequestException);
+    await expect(service.addFotos('rep-1', [], 'u-1')).rejects.toThrow(BadRequestException);
   });
 
   it('devuelve 400 si el reporte no existe', async () => {
     prismaMock.reporte.findUnique.mockResolvedValue(null);
-    await expect(service.addFotos('no-existe', [makeFile(PNG_1x1)])).rejects.toThrow(
+    await expect(service.addFotos('no-existe', [makeFile(PNG_1x1)], 'u-1')).rejects.toThrow(
       'El reporte no existe',
     );
   });

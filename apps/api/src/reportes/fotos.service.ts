@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import { Fotografia } from '@prisma/client';
 import sharp from 'sharp';
 import { randomUUID } from 'crypto';
@@ -44,7 +49,11 @@ export class FotosService {
     @Inject(StorageService) private readonly storage: StorageService,
   ) {}
 
-  async addFotos(reporteId: string, files: Express.Multer.File[]): Promise<Fotografia[]> {
+  async addFotos(
+    reporteId: string,
+    files: Express.Multer.File[],
+    usuarioId: string,
+  ): Promise<Fotografia[]> {
     if (!files || files.length === 0) {
       throw new BadRequestException('Debes adjuntar al menos una fotografía');
     }
@@ -55,6 +64,12 @@ export class FotosService {
     });
     if (!reporte) {
       throw new BadRequestException('El reporte no existe');
+    }
+    // HU2: solo el propietario agrega fotos a su reporte.
+    if (reporte.propietarioId !== usuarioId) {
+      throw new ForbiddenException(
+        'Solo el propietario puede agregar fotos a este reporte',
+      );
     }
 
     let orden = reporte.fotos.length > 0 ? reporte.fotos[0].orden + 1 : 0;

@@ -59,8 +59,10 @@ export class ReportesController {
   async uploadFotos(
     @Param('id') id: string,
     @UploadedFiles() files: Express.Multer.File[],
+    @Req() req: Request,
   ): Promise<FotografiaResponse[]> {
-    const creadas = await this.fotosService.addFotos(id, files ?? []);
+    const user = await this.currentUser.getUser(req);
+    const creadas = await this.fotosService.addFotos(id, files ?? [], user.id);
     return creadas.map((f) => ({
       id: f.id,
       reporteId: f.reporteId,

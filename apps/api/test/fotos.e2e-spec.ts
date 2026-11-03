@@ -6,6 +6,7 @@ import request from 'supertest';
 import sharp from 'sharp';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { DEMO_EMAIL } from '../src/usuarios/current-user.provider';
 
 const PNG_1x1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -40,7 +41,15 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
         color: 'Blanco',
         caracteristicasDistintivas: 'Collar verde',
         estado: 'PERDIDA',
-        propietarioId: (await prisma.usuario.findFirstOrThrow()).id,
+        // Sin X-User-Id la sesión simulada es el usuario demo: debe ser el
+        // dueño, porque solo el propietario puede subir fotos.
+        propietarioId: (
+          await prisma.usuario.upsert({
+            where: { email: DEMO_EMAIL },
+            update: {},
+            create: { nombre: 'Usuario Demo', email: DEMO_EMAIL },
+          })
+        ).id,
       },
     });
     reporteId = reporte.id;
@@ -136,5 +145,22 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
       .post('/reportes/no-existe/fotos')
       .attach('fotos', PNG_1x1, 'x.png')
       .expect(400);
+  });
+
+  it('quien no es el propietario recibe 403 y no se agrega ninguna foto', async () => {
+    const antes = await prisma.fotografia.count({ where: { reporteId } });
+    const intruso = await prisma.usuario.create({
+      data: {
+        nombre: 'Intruso Fotos',
+        email: `intruso-fotos-${Date.now()}@test.dev`,
+      },
+    });
+    await request(app.getHttpServer())
+      .post(`/reportes/${reporteId}/fotos`)
+      .set('X-User-Id', intruso.id)
+      .attach('fotos', PNG_1x1, 'ajena.png')
+      .expect(403);
+    expect(await prisma.fotografia.count({ where: { reporteId } })).toBe(antes);
+    await prisma.usuario.delete({ where: { id: intruso.id } });
   });
 });
