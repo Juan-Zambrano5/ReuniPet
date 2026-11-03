@@ -10,9 +10,8 @@ import { TipCard } from '@/components/ui/TipCard';
 import { Button } from '@/components/ui/button';
 import {
   ApiError,
-  API_URL,
   createReporte,
-  getSessionHeaders,
+  apiFetch,
 } from '@/lib/api';
 import {
   BorradorReporte,
@@ -146,9 +145,9 @@ export function FotosCarga(): React.JSX.Element {
   ): Promise<FotografiaResponse[]> {
     const formData = new FormData();
     formData.append('fotos', foto.file);
-    const res = await fetch(`${API_URL}/reportes/${reporteId}/fotos`, {
+    // HU16: apiFetch agrega el token y maneja el 401 (sesión expirada).
+    const res = await apiFetch(`/reportes/${reporteId}/fotos`, {
       method: 'POST',
-      headers: getSessionHeaders(),
       body: formData,
     });
     if (!res.ok) {

@@ -63,7 +63,6 @@ const reportePerdida = {
   longitud: null,
   esPropietario: true,
   estado: EstadoReporte.PERDIDA,
-  propietarioId: 'user-1',
   createdAt: '2026-09-28T10:00:00.000Z',
   updatedAt: '2026-09-28T10:00:00.000Z',
   fotos: [],
@@ -74,7 +73,6 @@ const reporteEncontrada = {
   id: 'rep-hallazgo',
   tipo: TipoReporte.ENCONTRADA,
   estado: EstadoReporte.ENCONTRADA,
-  propietarioId: 'user-2',
   esPropietario: false,
 };
 

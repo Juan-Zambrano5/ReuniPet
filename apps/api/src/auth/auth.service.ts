@@ -1,15 +1,25 @@
 import {
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   InternalServerErrorException,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { UsuarioPublicoResponse } from '@reunipet/shared';
+import { Prisma, Usuario } from '@prisma/client';
+import { LoginResponse, UsuarioPublicoResponse } from '@reunipet/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { hashPassword } from './password-hasher';
+import { LoginRateLimiter } from './login-rate-limiter';
+import { hashPassword, verifyPassword } from './password-hasher';
+import { TokenService } from './token.service';
 
 export const CORREO_DUPLICADO = 'El correo ya está registrado';
+// HU16 AC2: un único mensaje, sin revelar si falló el correo o la contraseña.
+export const CREDENCIALES_INVALIDAS = 'Correo o contraseña incorrectos';
+export const DEMASIADOS_INTENTOS =
+  'Demasiados intentos fallidos. Intenta de nuevo en 15 minutos.';
 
 // Campos públicos: la respuesta NUNCA incluye passwordHash.
 const USUARIO_PUBLICO = {
@@ -20,9 +30,63 @@ const USUARIO_PUBLICO = {
   createdAt: true,
 } as const;
 
+// Hash de relleno: si el correo no existe se verifica contra él igual, para
+// que el tiempo de respuesta no revele qué correos están registrados.
+let hashDeRelleno: Promise<string> | null = null;
+function obtenerHashDeRelleno(): Promise<string> {
+  hashDeRelleno ??= hashPassword('relleno-para-tiempo-constante');
+  return hashDeRelleno;
+}
+
+export function aUsuarioPublico(
+  u: Pick<Usuario, 'id' | 'nombre' | 'email' | 'telefono' | 'createdAt'>,
+): UsuarioPublicoResponse {
+  return {
+    id: u.id,
+    nombre: u.nombre,
+    email: u.email,
+    telefono: u.telefono,
+    createdAt: u.createdAt.toISOString(),
+  };
+}
+
 @Injectable()
 export class AuthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tokens: TokenService,
+    private readonly limitador: LoginRateLimiter,
+  ) {}
+
+  /**
+   * HU16: verifica correo y contraseña y devuelve un JWT de 8 horas.
+   * Nunca registra el body ni distingue en la respuesta qué dato falló.
+   */
+  async login(dto: LoginDto): Promise<LoginResponse> {
+    const email = dto.email.trim().toLowerCase();
+
+    // AC3: con el correo bloqueado no se verifica nada ni cambia la sesión.
+    if (this.limitador.estaBloqueado(email)) {
+      throw new HttpException(DEMASIADOS_INTENTOS, HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    const usuario = await this.prisma.usuario.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+    });
+    const hash = usuario?.passwordHash ?? (await obtenerHashDeRelleno());
+    const valida = await verifyPassword(dto.password, hash);
+
+    if (!usuario || !usuario.passwordHash || !valida) {
+      this.limitador.registrarFallo(email);
+      throw new UnauthorizedException(CREDENCIALES_INVALIDAS);
+    }
+
+    this.limitador.registrarExito(email);
+    return {
+      token: await this.tokens.firmar(usuario.id),
+      usuario: aUsuarioPublico(usuario),
+    };
+  }
 
   async register(dto: RegisterDto): Promise<UsuarioPublicoResponse> {
     // El DTO ya normaliza; se repite aquí para no depender del pipe.

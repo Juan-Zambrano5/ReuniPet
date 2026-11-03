@@ -1,11 +1,18 @@
 import {
   ConflictException,
+  HttpException,
   InternalServerErrorException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { AuthService, CORREO_DUPLICADO } from './auth.service';
+import {
+  AuthService,
+  CORREO_DUPLICADO,
+  CREDENCIALES_INVALIDAS,
+} from './auth.service';
+import { LoginRateLimiter } from './login-rate-limiter';
 import { RegisterDto } from './dto/register.dto';
 import { hashPassword, verifyPassword } from './password-hasher';
 
@@ -53,7 +60,11 @@ describe('AuthService (HU12)', () => {
         ),
       },
     };
-    service = new AuthService(prismaMock as never);
+    service = new AuthService(
+      prismaMock as never,
+      {} as never,
+      new LoginRateLimiter(),
+    );
   });
 
   it('AC1: crea la cuenta con el correo normalizado y devuelve datos públicos', async () => {
@@ -115,6 +126,116 @@ describe('AuthService (HU12)', () => {
     expect(
       JSON.stringify((err as InternalServerErrorException).getResponse()),
     ).not.toContain('scrypt');
+  });
+});
+
+describe('AuthService.login (HU16)', () => {
+  const EMAIL = 'ana@test.dev';
+  let service: AuthService;
+  let findFirst: jest.Mock;
+  let firmar: jest.Mock;
+  let reloj: number;
+  let hash: string;
+
+  beforeAll(async () => {
+    hash = await hashPassword(PASSWORD);
+  });
+
+  beforeEach(() => {
+    reloj = 1_000_000;
+    findFirst = jest.fn().mockResolvedValue({
+      id: 'u-1',
+      nombre: 'Ana',
+      email: EMAIL,
+      telefono: null,
+      passwordHash: hash,
+      createdAt: new Date('2026-11-02T00:00:00Z'),
+    });
+    firmar = jest.fn().mockResolvedValue('token-firmado');
+    service = new AuthService(
+      { usuario: { findFirst } } as never,
+      { firmar } as never,
+      new LoginRateLimiter(() => reloj),
+    );
+  });
+
+  const login = (
+    email: string,
+    password: string,
+  ): ReturnType<AuthService['login']> => service.login({ email, password });
+
+  it('AC1: credenciales válidas → token y datos públicos (sin hash)', async () => {
+    const res = await login(' Ana@Test.DEV ', PASSWORD);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { email: { equals: EMAIL, mode: 'insensitive' } },
+    });
+    expect(firmar).toHaveBeenCalledWith('u-1');
+    expect(res).toEqual({
+      token: 'token-firmado',
+      usuario: {
+        id: 'u-1',
+        nombre: 'Ana',
+        email: EMAIL,
+        telefono: null,
+        createdAt: '2026-11-02T00:00:00.000Z',
+      },
+    });
+    expect(JSON.stringify(res)).not.toContain('scrypt');
+  });
+
+  it('AC2: contraseña incorrecta y correo inexistente dan el MISMO 401', async () => {
+    const malaClave: unknown = await login(EMAIL, 'otra-clave').catch(
+      (e: unknown) => e,
+    );
+    findFirst.mockResolvedValue(null);
+    const sinCorreo: unknown = await login('nadie@test.dev', PASSWORD).catch(
+      (e: unknown) => e,
+    );
+    for (const err of [malaClave, sinCorreo]) {
+      expect(err).toBeInstanceOf(UnauthorizedException);
+      expect((err as UnauthorizedException).message).toBe(
+        CREDENCIALES_INVALIDAS,
+      );
+    }
+    expect(firmar).not.toHaveBeenCalled();
+  });
+
+  it('AC2: un usuario sin contraseña (demo sin DEMO_PASSWORD) no puede entrar', async () => {
+    findFirst.mockResolvedValue({ id: 'demo', passwordHash: null });
+    await expect(login(EMAIL, PASSWORD)).rejects.toThrow(
+      CREDENCIALES_INVALIDAS,
+    );
+  });
+
+  it('AC3: tras 5 fallos responde 429 aunque la contraseña sea correcta, y no firma token', async () => {
+    for (let i = 0; i < 5; i++) {
+      await expect(login(EMAIL, 'mala')).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    }
+    const err: unknown = await login(EMAIL, PASSWORD).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(HttpException);
+    expect((err as HttpException).getStatus()).toBe(429);
+    expect(firmar).not.toHaveBeenCalled();
+  });
+
+  it('AC3: pasados 15 minutos vuelve a dejar entrar', async () => {
+    for (let i = 0; i < 5; i++) {
+      await login(EMAIL, 'mala').catch(() => undefined);
+    }
+    reloj += 15 * 60 * 1000 + 1;
+    await expect(login(EMAIL, PASSWORD)).resolves.toHaveProperty('token');
+  });
+
+  it('AC3: un login correcto reinicia el conteo de fallos', async () => {
+    for (let i = 0; i < 4; i++) {
+      await login(EMAIL, 'mala').catch(() => undefined);
+    }
+    await login(EMAIL, PASSWORD);
+    for (let i = 0; i < 4; i++) {
+      await login(EMAIL, 'mala').catch(() => undefined);
+    }
+    await expect(login(EMAIL, PASSWORD)).resolves.toHaveProperty('token');
   });
 });
 

@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { auth, crearUsuarioConSesion } from './helpers/sesion';
 import { DEMO_EMAIL } from '../src/usuarios/current-user.provider';
 
 const DUENO_EMAIL = 'dueno-contacto@test.dev';
@@ -13,6 +14,7 @@ describe('HU10 — GET /reportes/:id/contacto', () => {
   let prisma: PrismaService;
   let duenoId: string;
   let solicitanteId: string;
+  let solicitanteToken: string;
   let reporteId: string;
 
   async function limpiar(): Promise<void> {
@@ -43,23 +45,20 @@ describe('HU10 — GET /reportes/:id/contacto', () => {
 
     await limpiar();
 
-    const dueno = await prisma.usuario.create({
-      data: {
-        nombre: 'María Pérez',
-        email: DUENO_EMAIL,
-        telefono: '04121234567',
-      },
+    const dueno = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'María Pérez',
+      email: DUENO_EMAIL,
+      telefono: '04121234567',
     });
     duenoId = dueno.id;
 
-    const solicitante = await prisma.usuario.create({
-      data: {
-        nombre: 'Carlos López',
-        email: SOLICITANTE_EMAIL,
-        telefono: '04147654321',
-      },
+    const solicitante = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Carlos López',
+      email: SOLICITANTE_EMAIL,
+      telefono: '04147654321',
     });
     solicitanteId = solicitante.id;
+    solicitanteToken = solicitante.token;
 
     const reporte = await prisma.reporte.create({
       data: {
@@ -83,7 +82,7 @@ describe('HU10 — GET /reportes/:id/contacto', () => {
   it('AC1: devuelve el nombre y un medio de contacto del reportante', async () => {
     const res = await request(app.getHttpServer())
       .get(`/reportes/${reporteId}/contacto`)
-      .set('X-User-Id', solicitanteId)
+      .set(auth(solicitanteToken))
       .expect(200);
 
     expect(res.body).toEqual({
@@ -106,19 +105,24 @@ describe('HU10 — GET /reportes/:id/contacto', () => {
     expect(ultima.createdAt).toBeInstanceOf(Date);
   });
 
-  it('AC3: funciona bajo la sesión simulada (sin header → usuario demo)', async () => {
-    const demo = await prisma.usuario.findUniqueOrThrow({
-      where: { email: DEMO_EMAIL },
-    });
+  it('AC3 (HU16): exige sesión; sin token → 401 y no registra nada', async () => {
+    const antes = await prisma.contactoSolicitud.count({ where: { reporteId } });
 
     await request(app.getHttpServer())
       .get(`/reportes/${reporteId}/contacto`)
-      .expect(200);
-
-    const delDemo = await prisma.contactoSolicitud.findFirst({
-      where: { reporteId, solicitanteId: demo.id },
+      .expect(401);
+    // El usuario demo ya no actúa de forma implícita, ni por X-User-Id.
+    const demo = await prisma.usuario.findUnique({
+      where: { email: DEMO_EMAIL },
     });
-    expect(delDemo).not.toBeNull();
+    await request(app.getHttpServer())
+      .get(`/reportes/${reporteId}/contacto`)
+      .set('X-User-Id', demo?.id ?? 'sin-demo')
+      .expect(401);
+
+    expect(await prisma.contactoSolicitud.count({ where: { reporteId } })).toBe(
+      antes,
+    );
   });
 
   it('AC3: cada consulta queda registrada (dos solicitudes → dos registros)', async () => {
@@ -128,7 +132,7 @@ describe('HU10 — GET /reportes/:id/contacto', () => {
 
     await request(app.getHttpServer())
       .get(`/reportes/${reporteId}/contacto`)
-      .set('X-User-Id', solicitanteId)
+      .set(auth(solicitanteToken))
       .expect(200);
 
     const despues = await prisma.contactoSolicitud.count({
@@ -142,17 +146,17 @@ describe('HU10 — GET /reportes/:id/contacto', () => {
 
     await request(app.getHttpServer())
       .get('/reportes/no-existe-123/contacto')
-      .set('X-User-Id', solicitanteId)
+      .set(auth(solicitanteToken))
       .expect(404);
 
     const despues = await prisma.contactoSolicitud.count();
     expect(despues).toBe(antes);
   });
 
-  it('sesión inválida (header con id inexistente) → 401', async () => {
+  it('sesión inválida (token alterado) → 401', async () => {
     await request(app.getHttpServer())
       .get(`/reportes/${reporteId}/contacto`)
-      .set('X-User-Id', 'id-que-no-existe')
+      .set(auth(`${solicitanteToken}x`))
       .expect(401);
   });
 });

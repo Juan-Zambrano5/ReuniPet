@@ -1,7 +1,6 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RegistroForm } from '@/components/auth/RegistroForm';
-import { AppNavbar } from '@/components/layout/AppNavbar';
 
 const push = jest.fn();
 jest.mock('next/navigation', () => ({
@@ -64,7 +63,7 @@ describe('RegistroForm (HU12)', () => {
       'email-error',
     );
     expect(global.fetch).not.toHaveBeenCalled();
-    expect(window.localStorage.getItem('x-user-id')).toBeNull();
+    expect(window.localStorage.getItem('reunipet:token')).toBeNull();
   });
 
   it('AC2: si el correo ya existe (409) muestra el error bajo el correo y no guarda sesión', async () => {
@@ -75,7 +74,7 @@ describe('RegistroForm (HU12)', () => {
 
     const error = await screen.findByText('El correo ya está registrado');
     expect(error).toHaveAttribute('id', 'email-error');
-    expect(window.localStorage.getItem('x-user-id')).toBeNull();
+    expect(window.localStorage.getItem('reunipet:token')).toBeNull();
     expect(push).not.toHaveBeenCalled();
   });
 
@@ -92,53 +91,71 @@ describe('RegistroForm (HU12)', () => {
     ).toHaveAttribute('id', 'password-error');
   });
 
-  it('AC1: al registrarse envía el correo normalizado, guarda la sesión simulada y navega', async () => {
-    global.fetch = respuesta(201, {
-      id: 'u-nuevo',
-      nombre: 'Ana Gómez',
-      email: 'ana@test.dev',
-      telefono: null,
-      createdAt: '2026-11-02T00:00:00.000Z',
-    });
+  it('AC1 (HU16): al registrarse inicia sesión con la cuenta nueva, guarda solo el token y navega', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: () =>
+          Promise.resolve({
+            id: 'u-nuevo',
+            nombre: 'Ana Gómez',
+            email: 'ana@test.dev',
+            telefono: null,
+            createdAt: '2026-11-02T00:00:00.000Z',
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            token: 'jwt-de-prueba',
+            usuario: { id: 'u-nuevo', nombre: 'Ana Gómez' },
+          }),
+      });
     render(<RegistroForm />);
     llenar();
     fireEvent.click(screen.getByRole('button', { name: /crear cuenta/i }));
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/mis-reportes'));
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [
+    const llamadas = (global.fetch as jest.Mock).mock.calls as [
       string,
       RequestInit,
-    ];
-    expect(url).toMatch(/\/auth\/register$/);
-    expect(JSON.parse(init.body as string)).toEqual({
+    ][];
+    expect(llamadas[0][0]).toMatch(/\/auth\/register$/);
+    expect(JSON.parse(llamadas[0][1].body as string)).toEqual({
       nombre: 'Ana Gómez',
       email: 'ana@test.dev',
       password: PASSWORD,
     });
-    expect(window.localStorage.getItem('x-user-id')).toBe('u-nuevo');
-    expect(window.localStorage.getItem('x-user-nombre')).toBe('Ana Gómez');
-    // Nunca se guarda la contraseña en el navegador.
+    expect(llamadas[1][0]).toMatch(/\/auth\/login$/);
+    expect(JSON.parse(llamadas[1][1].body as string)).toEqual({
+      email: 'ana@test.dev',
+      password: PASSWORD,
+    });
+    expect(window.localStorage.getItem('reunipet:token')).toBe('jwt-de-prueba');
+    expect(window.localStorage.getItem('reunipet:nombre')).toBe('Ana Gómez');
+    // Ya no se guarda el id como credencial, y nunca la contraseña.
+    expect(window.localStorage.getItem('x-user-id')).toBeNull();
     expect(JSON.stringify({ ...window.localStorage })).not.toContain(PASSWORD);
   });
-});
 
-describe('AppNavbar (HU12)', () => {
-  it('sin sesión muestra "Crear cuenta" junto a la campana y el avatar genérico', () => {
-    render(<AppNavbar />);
-    expect(screen.getByRole('link', { name: 'Crear cuenta' })).toHaveAttribute(
-      'href',
-      '/registro',
-    );
-    expect(screen.getByLabelText('Avatar de usuario')).toBeInTheDocument();
-  });
+  it('HU16: si la cuenta se crea pero el login falla, lleva a /login sin sesión', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: () => Promise.resolve({ id: 'u-nuevo', nombre: 'Ana Gómez' }),
+      })
+      .mockRejectedValueOnce(new Error('sin red'));
+    render(<RegistroForm />);
+    llenar();
+    fireEvent.click(screen.getByRole('button', { name: /crear cuenta/i }));
 
-  it('con sesión oculta el enlace y muestra la inicial en el avatar', async () => {
-    window.localStorage.setItem('x-user-id', 'u-1');
-    window.localStorage.setItem('x-user-nombre', 'ana Gómez');
-    render(<AppNavbar />);
-    const avatar = await screen.findByLabelText('Usuario: ana Gómez');
-    expect(avatar).toHaveTextContent('A');
-    expect(avatar).toHaveClass('h-9', 'w-9', 'rounded-full');
-    expect(screen.queryByRole('link', { name: 'Crear cuenta' })).not.toBeInTheDocument();
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/login'));
+    expect(window.localStorage.getItem('reunipet:token')).toBeNull();
   });
 });

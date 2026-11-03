@@ -77,7 +77,8 @@ export class ReportesController {
     @Query() dto: ListReportesDto,
     @Req() req: Request,
   ): Promise<ListReportesResponse> {
-    const user = await this.currentUser.getUser(req);
+    // HU16: ruta pública; sin sesión, coordenadas aproximadas para todos.
+    const user = await this.currentUser.getOptionalUser(req);
     return this.reportesService.list(dto, user);
   }
 
@@ -97,8 +98,9 @@ export class ReportesController {
     @Req() req: Request,
   ): Promise<ReporteResponse> {
     // HU9 AC3: las coords se sirven según quién consulta (dueño o tercero).
-    const user = await this.currentUser.getUser(req);
-    const reporte = await this.reportesService.findById(id, user.id);
+    // HU16: ruta pública; sin sesión esPropietario es false.
+    const user = await this.currentUser.getOptionalUser(req);
+    const reporte = await this.reportesService.findById(id, user?.id ?? null);
     if (!reporte) {
       throw new NotFoundException('Reporte no encontrado');
     }

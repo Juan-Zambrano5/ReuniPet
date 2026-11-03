@@ -7,6 +7,7 @@ import {
   PlusCircle,
   Search,
 } from 'lucide-react';
+import { RecientesZona } from '@/components/alertas/RecientesZona';
 
 const ACCIONES = [
   {
@@ -89,6 +90,20 @@ export default function HomePage(): React.JSX.Element {
           </Link>
         ))}
       </div>
+
+      {/* HU16, decisión 10: listado público (sin sesión) con enlace al detalle. */}
+      <section className="mt-8" aria-labelledby="reportes-recientes-title">
+        <h2
+          id="reportes-recientes-title"
+          className="text-lg font-semibold text-text"
+        >
+          Reportes recientes
+        </h2>
+        <p className="mt-1 text-sm text-muted">
+          Mascotas perdidas y encontradas publicadas por la comunidad.
+        </p>
+        <RecientesZona />
+      </section>
     </div>
   );
 }

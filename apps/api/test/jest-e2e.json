@@ -3,7 +3,14 @@
   "testEnvironment": "node",
   "rootDir": ".",
   "testRegex": ".*\\.e2e-spec\\.ts$",
-  "moduleFileExtensions": ["js", "json", "ts"],
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts"
+  ],
   "testTimeout": 30000,
-  "passWithNoTests": true
+  "passWithNoTests": true,
+  "setupFiles": [
+    "<rootDir>/setup-env.ts"
+  ]
 }

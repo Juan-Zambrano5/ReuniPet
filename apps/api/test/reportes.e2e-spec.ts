@@ -3,10 +3,12 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { auth, sesionDemo } from './helpers/sesion';
 
 describe('HU1 — POST /reportes (mascota perdida)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let demoToken: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -23,6 +25,8 @@ describe('HU1 — POST /reportes (mascota perdida)', () => {
     );
     await app.init();
     prisma = app.get(PrismaService);
+    // HU16: el usuario demo inicia sesión de verdad (ya no es implícito).
+    demoToken = (await sesionDemo(app, prisma)).token;
   });
 
   afterAll(async () => {
@@ -35,7 +39,7 @@ describe('HU1 — POST /reportes (mascota perdida)', () => {
   it('AC: crea un reporte tipo PERDIDA con estado PERDIDA y lo asocia al usuario en sesión', async () => {
     const res = await request(app.getHttpServer())
       .post('/reportes')
-      .set('X-User-Id', '') // sin header → usuario demo del seed
+      .set(auth(demoToken)) // HU16: sesión real del usuario demo
       .send({
         tipo: 'PERDIDA',
         especie: 'Gato',
@@ -53,7 +57,7 @@ describe('HU1 — POST /reportes (mascota perdida)', () => {
       caracteristicasDistintivas: 'oreja izquierda cortada',
     });
     expect(res.body.id).toBeDefined();
-    expect(res.body.propietarioId).toBeDefined();
+    expect(res.body.propietarioId).toBeUndefined();
 
     const saved = await prisma.reporte.findUnique({
       where: { id: res.body.id },
@@ -62,9 +66,24 @@ describe('HU1 — POST /reportes (mascota perdida)', () => {
     expect(saved?.estado).toBe('PERDIDA');
   });
 
+  it('HU16: sin sesión no se puede publicar un reporte (401) y no se guarda', async () => {
+    const antes = await prisma.reporte.count();
+    await request(app.getHttpServer())
+      .post('/reportes')
+      .send({
+        tipo: 'PERDIDA',
+        especie: 'Gato',
+        color: 'gris',
+        caracteristicasDistintivas: 'sin sesión',
+      })
+      .expect(401);
+    expect(await prisma.reporte.count()).toBe(antes);
+  });
+
   it('AC: devuelve 400 con mensaje de error cuando falta un campo obligatorio (color)', async () => {
     const res = await request(app.getHttpServer())
       .post('/reportes')
+      .set(auth(demoToken))
       .send({
         tipo: 'PERDIDA',
         especie: 'Perro',
@@ -79,6 +98,7 @@ describe('HU1 — POST /reportes (mascota perdida)', () => {
   it('AC: devuelve 400 cuando la especie está vacía', async () => {
     await request(app.getHttpServer())
       .post('/reportes')
+      .set(auth(demoToken))
       .send({
         tipo: 'PERDIDA',
         especie: '',
@@ -91,6 +111,7 @@ describe('HU1 — POST /reportes (mascota perdida)', () => {
   it('HU3 AC1/AC2: crea un reporte ENCONTRADA con ubicación y estado ENCONTRADA', async () => {
     const res = await request(app.getHttpServer())
       .post('/reportes')
+      .set(auth(demoToken))
       .send({
         tipo: 'ENCONTRADA',
         especie: 'Perro',
@@ -122,6 +143,7 @@ describe('HU1 — POST /reportes (mascota perdida)', () => {
   it('HU3 AC2: rechaza un reporte ENCONTRADA sin ubicación', async () => {
     const res = await request(app.getHttpServer())
       .post('/reportes')
+      .set(auth(demoToken))
       .send({
         tipo: 'ENCONTRADA',
         especie: 'Gato',

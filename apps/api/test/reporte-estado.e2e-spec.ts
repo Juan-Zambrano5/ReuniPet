@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { auth, crearUsuarioConSesion } from './helpers/sesion';
 
 const DUENO_EMAIL = 'dueno-estado@test.dev';
 const TERCERO_EMAIL = 'tercero-estado@test.dev';
@@ -11,8 +12,8 @@ const TERCERO_EMAIL = 'tercero-estado@test.dev';
 describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let duenoId: string;
-  let terceroId: string;
+  let duenoToken: string;
+  let terceroToken: string;
 
   async function limpiar(): Promise<void> {
     await prisma.coincidencia.deleteMany();
@@ -35,7 +36,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
   ): Promise<{ id: string }> {
     const res = await request(app.getHttpServer())
       .post('/reportes')
-      .set('X-User-Id', duenoId)
+      .set(auth(duenoToken))
       .send(datos)
       .expect(201);
     return res.body as { id: string };
@@ -59,15 +60,17 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
 
     await limpiar();
 
-    const dueno = await prisma.usuario.create({
-      data: { nombre: 'Dueño Estado', email: DUENO_EMAIL },
+    const dueno = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Dueño Estado',
+      email: DUENO_EMAIL,
     });
-    duenoId = dueno.id;
+    duenoToken = dueno.token;
 
-    const tercero = await prisma.usuario.create({
-      data: { nombre: 'Tercero Estado', email: TERCERO_EMAIL },
+    const tercero = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Tercero Estado',
+      email: TERCERO_EMAIL,
     });
-    terceroId = tercero.id;
+    terceroToken = tercero.token;
   });
 
   afterAll(async () => {
@@ -92,7 +95,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
     it('marca el reporte como RECUPERADA y responde 200 con el nuevo estado', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/reportes/${reporteId}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'RECUPERADA' })
         .expect(200);
 
@@ -122,7 +125,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
 
       const res = await request(app.getHttpServer())
         .patch(`/reportes/${reporteId}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'RECUPERADA' })
         .expect(200);
 
@@ -146,7 +149,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
 
       await request(app.getHttpServer())
         .patch(`/reportes/${reporte.id}/estado`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .send({ estado: 'RECUPERADA' })
         .expect(403);
 
@@ -159,7 +162,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
     it('reporte inexistente → 404', async () => {
       await request(app.getHttpServer())
         .patch('/reportes/id-que-no-existe/estado')
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'RECUPERADA' })
         .expect(404);
     });
@@ -193,7 +196,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
     it('con ambos activos la coincidencia aparece en las alertas del propietario', async () => {
       const res = await request(app.getHttpServer())
         .get('/usuarios/me/alertas')
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .expect(200);
 
       expect(res.body).toHaveLength(1);
@@ -206,13 +209,13 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
     it('al marcar la pérdida como RECUPERADA la alerta desaparece, pero el dato permanece en la BD', async () => {
       await request(app.getHttpServer())
         .patch(`/reportes/${perdidaId}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'RECUPERADA' })
         .expect(200);
 
       const alertas = await request(app.getHttpServer())
         .get('/usuarios/me/alertas')
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .expect(200);
       expect(alertas.body).toEqual([]);
 
@@ -266,27 +269,27 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
 
       const cerrado = await request(app.getHttpServer())
         .patch(`/reportes/${reporte.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'RECUPERADA' })
         .expect(200);
       expect(cerrado.body.estado).toBe('RECUPERADA');
 
       const detalleCerrado = await request(app.getHttpServer())
         .get(`/reportes/${reporte.id}`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .expect(200);
       expect(detalleCerrado.body.estado).toBe('RECUPERADA');
 
       const reabierto = await request(app.getHttpServer())
         .patch(`/reportes/${reporte.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'PERDIDA' })
         .expect(200);
       expect(reabierto.body.estado).toBe('PERDIDA');
 
       const detalleAbierto = await request(app.getHttpServer())
         .get(`/reportes/${reporte.id}`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .expect(200);
       expect(detalleAbierto.body.estado).toBe('PERDIDA');
     });
@@ -303,13 +306,13 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
 
       await request(app.getHttpServer())
         .patch(`/reportes/${reporte.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'RECUPERADA' })
         .expect(200);
 
       const reabierto = await request(app.getHttpServer())
         .patch(`/reportes/${reporte.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'ENCONTRADA' })
         .expect(200);
       expect(reabierto.body.estado).toBe('ENCONTRADA');
@@ -335,7 +338,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
 
       const alertasAntes = await request(app.getHttpServer())
         .get('/usuarios/me/alertas')
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .expect(200);
       expect(alertasAntes.body).toHaveLength(1);
       const coincidenciaId = alertasAntes.body[0].coincidenciaId;
@@ -343,7 +346,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
       // Cerrar: desaparece del listado y sus alertas se ocultan.
       await request(app.getHttpServer())
         .patch(`/reportes/${perdida.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'RECUPERADA' })
         .expect(200);
 
@@ -355,14 +358,14 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
       );
       const alertasCerradas = await request(app.getHttpServer())
         .get('/usuarios/me/alertas')
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .expect(200);
       expect(alertasCerradas.body).toEqual([]);
 
       // Reabrir: vuelve al listado y las alertas reaparecen.
       await request(app.getHttpServer())
         .patch(`/reportes/${perdida.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'PERDIDA' })
         .expect(200);
 
@@ -374,7 +377,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
       );
       const alertasAbiertas = await request(app.getHttpServer())
         .get('/usuarios/me/alertas')
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .expect(200);
       expect(alertasAbiertas.body).toHaveLength(1);
       expect(alertasAbiertas.body[0].coincidenciaId).toBe(coincidenciaId);
@@ -398,7 +401,7 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
 
       await request(app.getHttpServer())
         .patch(`/reportes/${activo.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'ENCONTRADA' })
         .expect(400);
 
@@ -410,13 +413,13 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
       // También sobre un reporte RECUPERADA: el tipo no cambia nunca.
       await request(app.getHttpServer())
         .patch(`/reportes/${activo.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'RECUPERADA' })
         .expect(200);
 
       await request(app.getHttpServer())
         .patch(`/reportes/${activo.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'ENCONTRADA' })
         .expect(400);
 
@@ -437,13 +440,13 @@ describe('HU11 — PATCH /reportes/:id/estado (marcar como recuperada)', () => {
       });
       await request(app.getHttpServer())
         .patch(`/reportes/${reporte.id}/estado`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .send({ estado: 'RECUPERADA' })
         .expect(200);
 
       await request(app.getHttpServer())
         .patch(`/reportes/${reporte.id}/estado`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .send({ estado: 'PERDIDA' })
         .expect(403);
 

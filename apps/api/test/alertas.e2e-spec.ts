@@ -3,10 +3,12 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { auth, crearUsuarioConSesion, sesionDemo } from './helpers/sesion';
 
 describe('HU4 — Alertas de coincidencia', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let demoToken: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -23,6 +25,8 @@ describe('HU4 — Alertas de coincidencia', () => {
     );
     await app.init();
     prisma = app.get(PrismaService);
+    // HU16: el usuario demo inicia sesión de verdad (ya no es implícito).
+    demoToken = (await sesionDemo(app, prisma)).token;
 
     await prisma.coincidencia.deleteMany();
     await prisma.reporte.deleteMany();
@@ -38,6 +42,7 @@ describe('HU4 — Alertas de coincidencia', () => {
   async function crearParCoincidente(): Promise<void> {
     await request(app.getHttpServer())
       .post('/reportes')
+      .set(auth(demoToken))
       .send({
         tipo: 'PERDIDA',
         especie: 'Perro',
@@ -49,6 +54,7 @@ describe('HU4 — Alertas de coincidencia', () => {
 
     await request(app.getHttpServer())
       .post('/reportes')
+      .set(auth(demoToken))
       .send({
         tipo: 'ENCONTRADA',
         especie: 'perro',
@@ -65,6 +71,7 @@ describe('HU4 — Alertas de coincidencia', () => {
 
     const res = await request(app.getHttpServer())
       .get('/usuarios/me/alertas')
+      .set(auth(demoToken))
       .expect(200);
 
     expect(res.body.length).toBeGreaterThanOrEqual(1);
@@ -85,17 +92,20 @@ describe('HU4 — Alertas de coincidencia', () => {
   it('AC3: PATCH /alertas/:id/visto marca la alerta como VISTA', async () => {
     const list = await request(app.getHttpServer())
       .get('/usuarios/me/alertas')
+      .set(auth(demoToken))
       .expect(200);
     const id = list.body[0].coincidenciaId;
 
     const res = await request(app.getHttpServer())
       .patch(`/alertas/${id}/visto`)
+      .set(auth(demoToken))
       .expect(200);
     expect(res.body.estado).toBe('VISTA');
 
     // sigue listada (PENDIENTE y VISTA se devuelven)
     const despues = await request(app.getHttpServer())
       .get('/usuarios/me/alertas')
+      .set(auth(demoToken))
       .expect(200);
     expect(
       despues.body.some(
@@ -106,38 +116,50 @@ describe('HU4 — Alertas de coincidencia', () => {
   });
 
   it('un usuario distinto NO ve las alertas de otro propietario', async () => {
-    const otro = await prisma.usuario.create({
-      data: { nombre: 'Otro', email: `otro-${Date.now()}@test.com` },
+    const otro = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Otro',
+      email: `otro-${Date.now()}@test.com`,
     });
 
     const res = await request(app.getHttpServer())
       .get('/usuarios/me/alertas')
-      .set('X-User-Id', otro.id)
+      .set(auth(otro.token))
       .expect(200);
 
     expect(res.body).toHaveLength(0);
   });
 
+  it('HU16: sin sesión las alertas exigen iniciar sesión (401)', async () => {
+    await request(app.getHttpServer()).get('/usuarios/me/alertas').expect(401);
+    await request(app.getHttpServer())
+      .patch('/alertas/cualquiera/visto')
+      .expect(401);
+  });
+
   it('devuelve 404 al marcar una alerta inexistente', async () => {
     await request(app.getHttpServer())
       .patch('/alertas/no-existe/visto')
+      .set(auth(demoToken))
       .expect(404);
   });
 
   it('PATCH /alertas/:id/descartar elimina la alerta de la lista y no vuelve a aparecer', async () => {
     const list = await request(app.getHttpServer())
       .get('/usuarios/me/alertas')
+      .set(auth(demoToken))
       .expect(200);
     expect(list.body.length).toBeGreaterThan(0);
     const id = list.body[0].coincidenciaId;
 
     const res = await request(app.getHttpServer())
       .patch(`/alertas/${id}/descartar`)
+      .set(auth(demoToken))
       .expect(200);
     expect(res.body.estado).toBe('DESCARTADA');
 
     const trasDescartar = await request(app.getHttpServer())
       .get('/usuarios/me/alertas')
+      .set(auth(demoToken))
       .expect(200);
     expect(
       trasDescartar.body.some(
@@ -148,9 +170,11 @@ describe('HU4 — Alertas de coincidencia', () => {
     // reintentar descartar la misma sigue siendo 200 y sigue fuera de la lista
     await request(app.getHttpServer())
       .patch(`/alertas/${id}/descartar`)
+      .set(auth(demoToken))
       .expect(200);
     const alRecargar = await request(app.getHttpServer())
       .get('/usuarios/me/alertas')
+      .set(auth(demoToken))
       .expect(200);
     expect(
       alRecargar.body.some(
@@ -162,6 +186,7 @@ describe('HU4 — Alertas de coincidencia', () => {
   it('devuelve 404 al descartar una alerta inexistente', async () => {
     await request(app.getHttpServer())
       .patch('/alertas/no-existe/descartar')
+      .set(auth(demoToken))
       .expect(404);
   });
 
@@ -171,6 +196,7 @@ describe('HU4 — Alertas de coincidencia', () => {
       await crearParCoincidente();
       const list = await request(app.getHttpServer())
         .get('/usuarios/me/alertas')
+        .set(auth(demoToken))
         .expect(200);
       const alerta = (
         list.body as { coincidenciaId: string; estado: string }[]
@@ -180,17 +206,18 @@ describe('HU4 — Alertas de coincidencia', () => {
     }
 
     async function intruso(): Promise<string> {
-      const u = await prisma.usuario.create({
-        data: { nombre: 'Intruso', email: `intruso-${Date.now()}@test.com` },
+      const u = await crearUsuarioConSesion(app, prisma, {
+        nombre: 'Intruso',
+        email: `intruso-${Date.now()}@test.com`,
       });
-      return u.id;
+      return u.token;
     }
 
     it('otro usuario recibe 403 al marcarla como vista y el estado no cambia', async () => {
       const id = await nuevaAlertaPendiente();
       await request(app.getHttpServer())
         .patch(`/alertas/${id}/visto`)
-        .set('X-User-Id', await intruso())
+        .set(auth(await intruso()))
         .expect(403);
       const c = await prisma.coincidencia.findUniqueOrThrow({ where: { id } });
       expect(c.estado).toBe('PENDIENTE');
@@ -200,7 +227,7 @@ describe('HU4 — Alertas de coincidencia', () => {
       const id = await nuevaAlertaPendiente();
       await request(app.getHttpServer())
         .patch(`/alertas/${id}/descartar`)
-        .set('X-User-Id', await intruso())
+        .set(auth(await intruso()))
         .expect(403);
       const c = await prisma.coincidencia.findUniqueOrThrow({ where: { id } });
       expect(c.estado).toBe('PENDIENTE');
@@ -208,10 +235,14 @@ describe('HU4 — Alertas de coincidencia', () => {
 
     it('AC3: abrir dos veces es idempotente y no revive una descartada', async () => {
       const id = await nuevaAlertaPendiente();
-      await request(app.getHttpServer()).patch(`/alertas/${id}/visto`).expect(200);
+      await request(app.getHttpServer())
+        .patch(`/alertas/${id}/visto`)
+        .set(auth(demoToken))
+        .expect(200);
       const antes = await prisma.coincidencia.findUniqueOrThrow({ where: { id } });
       const otra = await request(app.getHttpServer())
         .patch(`/alertas/${id}/visto`)
+        .set(auth(demoToken))
         .expect(200);
       expect((otra.body as { estado: string }).estado).toBe('VISTA');
       const despues = await prisma.coincidencia.findUniqueOrThrow({ where: { id } });
@@ -219,9 +250,11 @@ describe('HU4 — Alertas de coincidencia', () => {
 
       await request(app.getHttpServer())
         .patch(`/alertas/${id}/descartar`)
+        .set(auth(demoToken))
         .expect(200);
       const reabierta = await request(app.getHttpServer())
         .patch(`/alertas/${id}/visto`)
+        .set(auth(demoToken))
         .expect(200);
       expect((reabierta.body as { estado: string }).estado).toBe('DESCARTADA');
     });
@@ -230,10 +263,12 @@ describe('HU4 — Alertas de coincidencia', () => {
       const id = await nuevaAlertaPendiente();
       const visto = await request(app.getHttpServer())
         .patch(`/alertas/${id}/visto`)
+        .set(auth(demoToken))
         .expect(200);
       expect((visto.body as { estado: string }).estado).toBe('VISTA');
       const desc = await request(app.getHttpServer())
         .patch(`/alertas/${id}/descartar`)
+        .set(auth(demoToken))
         .expect(200);
       expect((desc.body as { estado: string }).estado).toBe('DESCARTADA');
     });

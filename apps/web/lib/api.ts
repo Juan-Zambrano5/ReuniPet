@@ -4,12 +4,15 @@ import {
   CreateReporteInput,
   EstadoReporte,
   ListReportesResponse,
+  LoginInput,
+  LoginResponse,
   MiReporteItem,
   RegisterInput,
   ReporteResponse,
   TipoReporte,
   UsuarioPublicoResponse,
 } from '@reunipet/shared';
+import { cerrarSesion, leerToken, sesionNoAutorizada } from './sesion';
 
 const API_URL_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 export const API_URL = API_URL_BASE;
@@ -24,36 +27,69 @@ export class ApiError extends Error {
   }
 }
 
+// HU16: la sesión vive en lib/sesion.ts (token JWT). Se reexportan las
+// funciones que ya usaban los componentes.
+export {
+  SESION_EVENTO,
+  cerrarSesion,
+  guardarSesion,
+  haySesion,
+  leerNombreSesion,
+} from './sesion';
+
 export function getSessionHeaders(): Record<string, string> {
-  if (typeof window === 'undefined') return {};
-  const userId = window.localStorage.getItem(SESION_ID_KEY);
-  return userId ? { 'X-User-Id': userId } : {};
+  const token = leerToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-// HU12: sesión SIMULADA (AGENTS.md §3 y §10.3). Tras registrarse se guarda el
-// id del usuario en localStorage y viaja como header X-User-Id.
-// ADVERTENCIA: X-User-Id es FALSIFICABLE hasta HU16 (login + JWT, Sprint 4):
-// cualquiera puede enviar el id de otro usuario. La regla "solo el
-// propietario" protege contra errores de uso, NO contra un atacante.
-// Nunca se guarda la contraseña: solo id y nombre (para la barra).
-export const SESION_ID_KEY = 'x-user-id';
-export const SESION_NOMBRE_KEY = 'x-user-nombre';
-export const SESION_EVENTO = 'reunipet:sesion';
-
-export function guardarSesion(
-  usuario: Pick<UsuarioPublicoResponse, 'id' | 'nombre'>,
-): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(SESION_ID_KEY, usuario.id);
-  window.localStorage.setItem(SESION_NOMBRE_KEY, usuario.nombre);
-  // Avisa a la barra de navegación (misma pestaña) que cambió la sesión.
-  window.dispatchEvent(new Event(SESION_EVENTO));
+/**
+ * Fetch al API con el token de la sesión. HU16 AC4: un 401 limpia la sesión y
+ * lleva a /login ("Tu sesión expiró"); la promesa sigue devolviendo la
+ * respuesta para que el llamador lance su ApiError como siempre.
+ */
+export async function apiFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { ...getSessionHeaders(), ...(init.headers as Record<string, string>) },
+  });
+  if (res.status === 401) sesionNoAutorizada();
+  return res;
 }
 
-export function leerNombreSesion(): string | null {
-  if (typeof window === 'undefined') return null;
-  if (!window.localStorage.getItem(SESION_ID_KEY)) return null;
-  return window.localStorage.getItem(SESION_NOMBRE_KEY);
+/**
+ * Fetch para rutas públicas (GET /reportes y GET /reportes/:id, decisión 10
+ * del plan): se envía el token si hay, para que el dueño vea sus botones,
+ * pero un 401 (token vencido o inválido) NO lleva a /login: se cierra la
+ * sesión en silencio y se repite la consulta como anónimo.
+ */
+export async function apiFetchPublico(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { ...getSessionHeaders(), ...(init.headers as Record<string, string>) },
+  });
+  if (res.status !== 401 || !leerToken()) return res;
+  cerrarSesion();
+  return fetch(`${API_URL}${path}`, init);
+}
+
+// HU16: POST /auth/login. Aquí un 401 significa credenciales incorrectas, no
+// sesión vencida: por eso NO pasa por apiFetch.
+export async function iniciarSesion(input: LoginInput): Promise<LoginResponse> {
+  const res = await fetch(`${API_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.json().catch(() => ({})));
+  }
+  return (await res.json()) as LoginResponse;
 }
 
 // HU12: POST /auth/register. La respuesta nunca trae contraseña ni hash.
@@ -74,11 +110,10 @@ export async function registrarUsuario(
 export async function createReporte(
   input: CreateReporteInput,
 ): Promise<ReporteResponse> {
-  const res = await fetch(`${API_URL}/reportes`, {
+  const res = await apiFetch(`/reportes`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...getSessionHeaders(),
     },
     body: JSON.stringify(input),
   });
@@ -91,8 +126,7 @@ export async function createReporte(
 }
 
 export async function getReporte(id: string): Promise<ReporteResponse> {
-  const res = await fetch(`${API_URL}/reportes/${id}`, {
-    headers: getSessionHeaders(),
+  const res = await apiFetchPublico(`/reportes/${id}`, {
     cache: 'no-store',
   });
   if (!res.ok) {
@@ -107,11 +141,10 @@ export async function cambiarEstadoReporte(
   id: string,
   estado: EstadoReporte,
 ): Promise<Pick<ReporteResponse, 'id' | 'estado' | 'updatedAt'>> {
-  const res = await fetch(`${API_URL}/reportes/${id}/estado`, {
+  const res = await apiFetch(`/reportes/${id}/estado`, {
     method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
-      ...getSessionHeaders(),
     },
     body: JSON.stringify({ estado }),
   });
@@ -125,8 +158,7 @@ export async function cambiarEstadoReporte(
 export async function getContacto(
   id: string,
 ): Promise<ContactoPropietarioResponse> {
-  const res = await fetch(`${API_URL}/reportes/${id}/contacto`, {
-    headers: getSessionHeaders(),
+  const res = await apiFetch(`/reportes/${id}/contacto`, {
     cache: 'no-store',
   });
   if (!res.ok) {
@@ -163,8 +195,7 @@ export async function getReportes(
   if (params.lng !== undefined) qs.set('lng', String(params.lng));
   if (params.radioKm !== undefined) qs.set('radioKm', String(params.radioKm));
   const query = qs.toString();
-  const res = await fetch(`${API_URL}/reportes${query ? `?${query}` : ''}`, {
-    headers: getSessionHeaders(),
+  const res = await apiFetchPublico(`/reportes${query ? `?${query}` : ''}`, {
     cache: 'no-store',
   });
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
@@ -173,8 +204,7 @@ export async function getReportes(
 
 // HU15: reportes del usuario de la sesión (todos los estados).
 export async function getMisReportes(): Promise<MiReporteItem[]> {
-  const res = await fetch(`${API_URL}/usuarios/me/reportes`, {
-    headers: getSessionHeaders(),
+  const res = await apiFetch(`/usuarios/me/reportes`, {
     cache: 'no-store',
   });
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
@@ -182,8 +212,7 @@ export async function getMisReportes(): Promise<MiReporteItem[]> {
 }
 
 export async function getAlertas(): Promise<AlertaResponse[]> {
-  const res = await fetch(`${API_URL}/usuarios/me/alertas`, {
-    headers: getSessionHeaders(),
+  const res = await apiFetch(`/usuarios/me/alertas`, {
     cache: 'no-store',
   });
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
@@ -191,17 +220,15 @@ export async function getAlertas(): Promise<AlertaResponse[]> {
 }
 
 export async function marcarVista(coincidenciaId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/alertas/${coincidenciaId}/visto`, {
+  const res = await apiFetch(`/alertas/${coincidenciaId}/visto`, {
     method: 'PATCH',
-    headers: getSessionHeaders(),
   });
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
 }
 
 export async function descartarAlerta(coincidenciaId: string): Promise<void> {
-  const res = await fetch(`${API_URL}/alertas/${coincidenciaId}/descartar`, {
+  const res = await apiFetch(`/alertas/${coincidenciaId}/descartar`, {
     method: 'PATCH',
-    headers: getSessionHeaders(),
   });
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
 }

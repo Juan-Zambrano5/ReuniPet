@@ -36,7 +36,7 @@ export interface ReporteResponse {
   caracteristicasDistintivas: string;
   ubicacion: string | null;
   estado: EstadoReporte;
-  propietarioId: string;
+  // propietarioId no se expone (ni al dueño): basta con esPropietario.
   // HU9 AC3: exactas al propietario, aproximadas (~1km) a terceros.
   latitud: number | null;
   longitud: number | null;
@@ -138,6 +138,18 @@ export interface UsuarioPublicoResponse {
   email: string;
   telefono: string | null;
   createdAt: string;
+}
+
+// HU16: inicio de sesión (POST /auth/login).
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+// El token es un JWT (8 h) que viaja en `Authorization: Bearer <token>`.
+export interface LoginResponse {
+  token: string;
+  usuario: UsuarioPublicoResponse;
 }
 
 // HU15: GET /usuarios/me/reportes — reportes propios (todos los estados).

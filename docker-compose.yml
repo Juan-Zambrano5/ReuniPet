@@ -30,6 +30,11 @@ services:
       # Dentro del contenedor la API siempre escucha en 3001; PORT solo
       # cambia el puerto publicado en el host.
       PORT: '3001'
+      # HU16: sin JWT_SECRET la API no arranca (no hay valor por defecto).
+      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en .env (mínimo 32 caracteres)}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      # En producción X-User-Id nunca se acepta, aunque llegue AUTH_MODE=dev.
+      NODE_ENV: production
     ports:
       - '${PORT:-3001}:3001'
     volumes:

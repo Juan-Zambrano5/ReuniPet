@@ -5,6 +5,7 @@ import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { verifyPassword } from '../src/auth/password-hasher';
 import { DEMO_EMAIL } from '../src/usuarios/current-user.provider';
+import { auth, iniciarSesion } from './helpers/sesion';
 
 const EMAIL = 'registro-hu12@test.dev';
 const OTRO_EMAIL = 'registro-hu12-b@test.dev';
@@ -75,7 +76,7 @@ describe('HU12 — POST /auth/register', () => {
     await app.close();
   });
 
-  it('AC1: crea la cuenta (201) y el id sirve como sesión para publicar y gestionar reportes', async () => {
+  it('AC1: crea la cuenta (201) y con ella se inicia sesión para publicar y gestionar reportes', async () => {
     const res = await registrar({
       nombre: 'Ana Registro',
       email: EMAIL,
@@ -102,9 +103,11 @@ describe('HU12 — POST /auth/register', () => {
       verifyPassword(PASSWORD, guardado.passwordHash as string),
     ).resolves.toBe(true);
 
+    // HU16: la cuenta nueva entra con su contraseña (el registro no da token).
+    const token = await iniciarSesion(app, EMAIL, PASSWORD);
     const reporte = await request(app.getHttpServer())
       .post('/reportes')
-      .set('X-User-Id', usuario.id)
+      .set(auth(token))
       .send({
         tipo: 'PERDIDA',
         especie: 'Perro',
@@ -112,12 +115,15 @@ describe('HU12 — POST /auth/register', () => {
         caracteristicasDistintivas: 'Collar rojo',
       })
       .expect(201);
-    const reporteBody = reporte.body as { id: string; propietarioId: string };
-    expect(reporteBody.propietarioId).toBe(usuario.id);
+    const reporteBody = reporte.body as { id: string };
+    const creado = await prisma.reporte.findUnique({
+      where: { id: reporteBody.id },
+    });
+    expect(creado?.propietarioId).toBe(usuario.id);
 
     const detalle = await request(app.getHttpServer())
       .get(`/reportes/${reporteBody.id}`)
-      .set('X-User-Id', usuario.id)
+      .set(auth(token))
       .expect(200);
     expect((detalle.body as { esPropietario: boolean }).esPropietario).toBe(
       true,
@@ -210,14 +216,14 @@ describe('HU12 — POST /auth/register', () => {
     expect(ok.body).not.toHaveProperty('passwordHash');
   });
 
-  it('regresión: sin X-User-Id sigue actuando el usuario demo (sin contraseña)', async () => {
-    const demo = await prisma.usuario.findUniqueOrThrow({
+  it('HU16: sin token ya no actúa el usuario demo (401), ni siquiera con su X-User-Id', async () => {
+    await request(app.getHttpServer()).get('/usuarios/me/alertas').expect(401);
+    const demo = await prisma.usuario.findUnique({
       where: { email: DEMO_EMAIL },
     });
-    expect(demo.passwordHash).toBeNull();
-    const res = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .get('/usuarios/me/alertas')
-      .expect(200);
-    expect(Array.isArray(res.body)).toBe(true);
+      .set('X-User-Id', demo?.id ?? 'sin-demo')
+      .expect(401);
   });
 });

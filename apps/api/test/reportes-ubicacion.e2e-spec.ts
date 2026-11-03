@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { DEMO_EMAIL } from '../src/usuarios/current-user.provider';
+import { auth, crearUsuarioConSesion, sesionDemo } from './helpers/sesion';
 
 const TERCERO_EMAIL = 'tercero-ubicacion@test.dev';
 
@@ -11,7 +11,8 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let demoId: string;
-  let terceroId: string;
+  let demoToken: string;
+  let terceroToken: string;
 
   async function limpiar(): Promise<void> {
     await prisma.coincidencia.deleteMany();
@@ -21,14 +22,12 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
   }
 
   async function crearTercero(): Promise<void> {
-    const tercero = await prisma.usuario.create({
-      data: {
-        nombre: 'Tercero Ubicación',
-        email: TERCERO_EMAIL,
-        telefono: '04120000002',
-      },
+    const tercero = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Tercero Ubicación',
+      email: TERCERO_EMAIL,
+      telefono: '04120000002',
     });
-    terceroId = tercero.id;
+    terceroToken = tercero.token;
   }
 
   beforeAll(async () => {
@@ -47,10 +46,10 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     await app.init();
     prisma = app.get(PrismaService);
 
-    const demo = await prisma.usuario.findUniqueOrThrow({
-      where: { email: DEMO_EMAIL },
-    });
+    // HU16: el usuario demo inicia sesión de verdad (ya no es implícito).
+    const demo = await sesionDemo(app, prisma);
     demoId = demo.id;
+    demoToken = demo.token;
   });
 
   afterAll(async () => {
@@ -66,6 +65,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('POST con latitud/longitud las guarda en la BD y las devuelve al dueño', async () => {
       const res = await request(app.getHttpServer())
         .post('/reportes')
+        .set(auth(demoToken))
         .send({
           tipo: 'PERDIDA',
           especie: 'Perro',
@@ -96,6 +96,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('POST con solo latitud (par incompleto) → 400', async () => {
       await request(app.getHttpServer())
         .post('/reportes')
+        .set(auth(demoToken))
         .send({
           tipo: 'PERDIDA',
           especie: 'Gato',
@@ -109,6 +110,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('POST con coordenadas fuera de rango → 400', async () => {
       await request(app.getHttpServer())
         .post('/reportes')
+        .set(auth(demoToken))
         .send({
           tipo: 'PERDIDA',
           especie: 'Gato',
@@ -121,6 +123,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
 
       await request(app.getHttpServer())
         .post('/reportes')
+        .set(auth(demoToken))
         .send({
           tipo: 'PERDIDA',
           especie: 'Gato',
@@ -135,6 +138,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('HU9 AC1: ENCONTRADA con punto en el mapa y sin dirección escrita → 201', async () => {
       await request(app.getHttpServer())
         .post('/reportes')
+        .set(auth(demoToken))
         .send({
           tipo: 'ENCONTRADA',
           especie: 'Gato',
@@ -149,6 +153,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('HU3 intacto: ENCONTRADA sin dirección y sin punto sigue rechazándose', async () => {
       await request(app.getHttpServer())
         .post('/reportes')
+        .set(auth(demoToken))
         .send({
           tipo: 'ENCONTRADA',
           especie: 'Gato',
@@ -167,7 +172,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
       await limpiar();
       await crearTercero();
 
-      // Creado por el usuario demo (sin header → sesión demo).
+      // Creado por el usuario demo (sesión real del demo, HU16).
       const conCoords = await prisma.reporte.create({
         data: {
           tipo: 'PERDIDA',
@@ -199,6 +204,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('el propietario ve las coordenadas exactas en el detalle', async () => {
       const res = await request(app.getHttpServer())
         .get(`/reportes/${reporteConCoordsId}`)
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body).toMatchObject({
@@ -211,7 +217,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('un tercero ve las coordenadas aproximadas (~1km), nunca el punto exacto', async () => {
       const res = await request(app.getHttpServer())
         .get(`/reportes/${reporteConCoordsId}`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .expect(200);
 
       expect(res.body.latitud).toBe(10.12);
@@ -223,13 +229,14 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('un reporte sin coordenadas las devuelve null para todos', async () => {
       const tercero = await request(app.getHttpServer())
         .get(`/reportes/${reporteSinCoordsId}`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .expect(200);
       expect(tercero.body.latitud).toBeNull();
       expect(tercero.body.longitud).toBeNull();
 
       const dueno = await request(app.getHttpServer())
         .get(`/reportes/${reporteSinCoordsId}`)
+        .set(auth(demoToken))
         .expect(200);
       expect(dueno.body.latitud).toBeNull();
     });
@@ -237,6 +244,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('detalle de un reporte inexistente → 404', async () => {
       await request(app.getHttpServer())
         .get('/reportes/no-existe-123')
+        .set(auth(demoToken))
         .expect(404);
     });
   });
@@ -268,6 +276,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('AC2: el propietario actualiza el punto y el texto de referencia', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/reportes/${reporteId}/ubicacion`)
+        .set(auth(demoToken))
         .send({
           latitud: 11.12345,
           longitud: -67.23456,
@@ -295,7 +304,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('AC3: tras el PATCH, un tercero ve el nuevo punto aproximado', async () => {
       const res = await request(app.getHttpServer())
         .get(`/reportes/${reporteId}`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .expect(200);
 
       expect(res.body.latitud).toBe(11.12);
@@ -306,6 +315,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('si no se envía texto, el de referencia queda intacto', async () => {
       const res = await request(app.getHttpServer())
         .patch(`/reportes/${reporteId}/ubicacion`)
+        .set(auth(demoToken))
         .send({ latitud: 11.5, longitud: -67.5 })
         .expect(200);
 
@@ -316,7 +326,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('un tercero no puede actualizar el reporte de otro usuario → 403', async () => {
       await request(app.getHttpServer())
         .patch(`/reportes/${reporteId}/ubicacion`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .send({ latitud: 10, longitud: -66 })
         .expect(403);
 
@@ -331,6 +341,7 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('reporte inexistente → 404', async () => {
       await request(app.getHttpServer())
         .patch('/reportes/no-existe-123/ubicacion')
+        .set(auth(demoToken))
         .send({ latitud: 10, longitud: -66 })
         .expect(404);
     });
@@ -338,21 +349,25 @@ describe('HU9 — ubicación de reportes (coords + aproximación)', () => {
     it('valida coordenadas: faltantes, fuera de rango y campos desconocidos → 400', async () => {
       await request(app.getHttpServer())
         .patch(`/reportes/${reporteId}/ubicacion`)
+        .set(auth(demoToken))
         .send({ latitud: 10 })
         .expect(400);
 
       await request(app.getHttpServer())
         .patch(`/reportes/${reporteId}/ubicacion`)
+        .set(auth(demoToken))
         .send({ latitud: 100, longitud: -66 })
         .expect(400);
 
       await request(app.getHttpServer())
         .patch(`/reportes/${reporteId}/ubicacion`)
+        .set(auth(demoToken))
         .send({ latitud: 10, longitud: -200 })
         .expect(400);
 
       await request(app.getHttpServer())
         .patch(`/reportes/${reporteId}/ubicacion`)
+        .set(auth(demoToken))
         .send({ latitud: 10, longitud: -66, foo: 'bar' })
         .expect(400);
     });

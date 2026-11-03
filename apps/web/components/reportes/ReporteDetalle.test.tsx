@@ -26,7 +26,6 @@ const reporte: ReporteResponse = {
   longitud: -66.99,
   esPropietario: false,
   estado: EstadoReporte.PERDIDA,
-  propietarioId: 'user-1',
   createdAt: '2026-09-28T10:00:00.000Z',
   updatedAt: '2026-09-28T10:00:00.000Z',
   fotos: [

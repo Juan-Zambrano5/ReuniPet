@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { auth, crearUsuarioConSesion } from './helpers/sesion';
 
 const DUENO_EMAIL = 'dueno-detalle@test.dev';
 const DUENO_TEL = '04129998877';
@@ -13,7 +14,8 @@ describe('HU13 — GET /reportes/:id (detalle y fotografías)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let duenoId: string;
-  let terceroId: string;
+  let duenoToken: string;
+  let terceroToken: string;
   let reporteConFotosId: string;
   let reporteSinFotosId: string;
 
@@ -50,19 +52,19 @@ describe('HU13 — GET /reportes/:id (detalle y fotografías)', () => {
 
     await limpiar();
 
-    const dueno = await prisma.usuario.create({
-      data: {
-        nombre: 'Dueño Detalle',
-        email: DUENO_EMAIL,
-        telefono: DUENO_TEL,
-      },
+    const dueno = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Dueño Detalle',
+      email: DUENO_EMAIL,
+      telefono: DUENO_TEL,
     });
     duenoId = dueno.id;
+    duenoToken = dueno.token;
 
-    const tercero = await prisma.usuario.create({
-      data: { nombre: 'Tercero Detalle', email: TERCERO_EMAIL },
+    const tercero = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Tercero Detalle',
+      email: TERCERO_EMAIL,
     });
-    terceroId = tercero.id;
+    terceroToken = tercero.token;
 
     const conFotos = await prisma.reporte.create({
       data: {
@@ -114,7 +116,7 @@ describe('HU13 — GET /reportes/:id (detalle y fotografías)', () => {
     it('devuelve las 3 fotos ordenadas por "orden" ascendente', async () => {
       const res = await request(app.getHttpServer())
         .get(`/reportes/${reporteConFotosId}`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .expect(200);
 
       expect(res.body.fotos).toHaveLength(3);
@@ -129,7 +131,7 @@ describe('HU13 — GET /reportes/:id (detalle y fotografías)', () => {
     it('devuelve tipo, especie, raza, color, características, ubicación, estado y fechas', async () => {
       const res = await request(app.getHttpServer())
         .get(`/reportes/${reporteConFotosId}`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .expect(200);
 
       expect(res.body).toMatchObject({
@@ -149,13 +151,13 @@ describe('HU13 — GET /reportes/:id (detalle y fotografías)', () => {
     it('marca esPropietario: false al tercero y true al dueño (con coords exactas)', async () => {
       const comoTercero = await request(app.getHttpServer())
         .get(`/reportes/${reporteConFotosId}`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .expect(200);
       expect(comoTercero.body.esPropietario).toBe(false);
 
       const comoDueno = await request(app.getHttpServer())
         .get(`/reportes/${reporteConFotosId}`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .expect(200);
       expect(comoDueno.body.esPropietario).toBe(true);
       expect(comoDueno.body.latitud).toBe(LAT_EXACTA);
@@ -167,11 +169,69 @@ describe('HU13 — GET /reportes/:id (detalle y fotografías)', () => {
     it('devuelve fotos: [] (arreglo vacío, no null ni undefined)', async () => {
       const res = await request(app.getHttpServer())
         .get(`/reportes/${reporteSinFotosId}`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .expect(200);
 
       expect(res.body.fotos).toEqual([]);
       expect(res.body).toMatchObject({ especie: 'Gato', estado: 'ENCONTRADA' });
+    });
+  });
+
+  describe('HU16: ruta pública con sesión opcional', () => {
+    it('sin sesión responde 200, esPropietario false, coordenadas aproximadas y sin contacto', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/reportes/${reporteConFotosId}`)
+        .expect(200);
+      expect(res.body).toMatchObject({
+        esPropietario: false,
+        latitud: LAT_APROX,
+        longitud: LNG_APROX,
+      });
+      expect(res.body.latitud).not.toBe(LAT_EXACTA);
+      expect(res.body.longitud).not.toBe(LNG_EXACTA);
+      expect(res.body.fotos).toHaveLength(3);
+      const texto = JSON.stringify(res.body);
+      expect(texto).not.toContain(DUENO_EMAIL);
+      expect(texto).not.toContain(DUENO_TEL);
+      expect(res.body.propietario).toBeUndefined();
+      expect(res.body.email).toBeUndefined();
+      expect(res.body.telefono).toBeUndefined();
+    });
+
+    it('un token inválido o vencido → 401 (el frontend lo trata como sesión expirada)', async () => {
+      await request(app.getHttpServer())
+        .get(`/reportes/${reporteConFotosId}`)
+        .set(auth('token-alterado'))
+        .expect(401);
+    });
+
+    it('la respuesta nunca incluye propietarioId (anónimo, otro usuario ni el dueño)', async () => {
+      const anonimo = await request(app.getHttpServer())
+        .get(`/reportes/${reporteConFotosId}`)
+        .expect(200);
+      const comoTercero = await request(app.getHttpServer())
+        .get(`/reportes/${reporteConFotosId}`)
+        .set(auth(terceroToken))
+        .expect(200);
+      const comoDueno = await request(app.getHttpServer())
+        .get(`/reportes/${reporteConFotosId}`)
+        .set(auth(duenoToken))
+        .expect(200);
+
+      for (const cuerpo of [anonimo.body, comoTercero.body, comoDueno.body]) {
+        expect(cuerpo).not.toHaveProperty('propietarioId');
+        expect(JSON.stringify(cuerpo)).not.toContain(duenoId);
+      }
+      expect(comoDueno.body.esPropietario).toBe(true);
+    });
+
+    it('X-User-Id ya no identifica a nadie: el dueño por header se trata como anónimo', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/reportes/${reporteConFotosId}`)
+        .set('X-User-Id', duenoId)
+        .expect(200);
+      expect(res.body.esPropietario).toBe(false);
+      expect(res.body.latitud).toBe(LAT_APROX);
     });
   });
 
@@ -189,7 +249,7 @@ describe('HU13 — GET /reportes/:id (detalle y fotografías)', () => {
     it('a un tercero sirve coordenadas aproximadas (~1km), nunca el punto exacto', async () => {
       const res = await request(app.getHttpServer())
         .get(`/reportes/${reporteConFotosId}`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .expect(200);
 
       expect(res.body.latitud).toBe(LAT_APROX);
@@ -201,11 +261,11 @@ describe('HU13 — GET /reportes/:id (detalle y fotografías)', () => {
     it('la respuesta nunca incluye email ni teléfono del propietario (ni siquiera al dueño)', async () => {
       const comoTercero = await request(app.getHttpServer())
         .get(`/reportes/${reporteConFotosId}`)
-        .set('X-User-Id', terceroId)
+        .set(auth(terceroToken))
         .expect(200);
       const comoDueno = await request(app.getHttpServer())
         .get(`/reportes/${reporteConFotosId}`)
-        .set('X-User-Id', duenoId)
+        .set(auth(duenoToken))
         .expect(200);
 
       for (const cuerpo of [comoTercero.body, comoDueno.body]) {

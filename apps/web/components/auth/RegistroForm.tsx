@@ -6,7 +6,12 @@ import { Loader2 } from 'lucide-react';
 import { FormField } from '@/components/FormField';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { ApiError, guardarSesion, registrarUsuario } from '@/lib/api';
+import {
+  ApiError,
+  guardarSesion,
+  iniciarSesion,
+  registrarUsuario,
+} from '@/lib/api';
 
 type Campo = 'nombre' | 'email' | 'telefono' | 'password' | 'confirmar';
 type Valores = Record<Campo, string>;
@@ -86,19 +91,26 @@ export function RegistroForm(): React.JSX.Element {
     if (Object.keys(locales).length > 0) return;
 
     setEnviando(true);
+    const email = valores.email.trim().toLowerCase();
     try {
-      const usuario = await registrarUsuario({
+      await registrarUsuario({
         nombre: valores.nombre.trim(),
-        email: valores.email.trim().toLowerCase(),
+        email,
         telefono: valores.telefono.trim() || undefined,
         password: valores.password,
       });
-      // Sesión simulada (falsificable hasta HU16): ver guardarSesion.
-      guardarSesion(usuario);
-      router.push('/mis-reportes');
     } catch (error) {
       setErrores(erroresDelServidor(error));
       setEnviando(false);
+      return;
+    }
+    // HU16: el registro no entrega token; se inicia sesión con los mismos
+    // datos. Si eso falla, la cuenta ya existe: se envía a /login.
+    try {
+      guardarSesion(await iniciarSesion({ email, password: valores.password }));
+      router.push('/mis-reportes');
+    } catch {
+      router.push('/login');
     }
   }
 

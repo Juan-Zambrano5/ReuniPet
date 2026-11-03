@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { RegistroForm } from '@/components/auth/RegistroForm';
 import { TipCard } from '@/components/ui/TipCard';
 
@@ -18,6 +19,12 @@ export default function RegistroPage(): React.JSX.Element {
             reencuentro.
           </p>
           <RegistroForm />
+          <p className="mt-4 text-center text-sm text-muted">
+            ¿Ya tienes cuenta?{' '}
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              Inicia sesión
+            </Link>
+          </p>
         </div>
         <TipCard
           titulo="Tu cuenta te permite publicar y seguir tus reportes"

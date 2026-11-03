@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { DEMO_EMAIL } from '../src/usuarios/current-user.provider';
+import { auth, sesionDemo } from './helpers/sesion';
 
 const TERCERO_EMAIL = 'tercero-listado@test.dev';
 
@@ -12,6 +12,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
   let prisma: PrismaService;
   let demoId: string;
   let terceroId: string;
+  let demoToken: string;
   let perdidaRecienteId: string;
   let perdidaAntiguaId: string;
 
@@ -40,10 +41,10 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     await app.init();
     prisma = app.get(PrismaService);
 
-    const demo = await prisma.usuario.findUniqueOrThrow({
-      where: { email: DEMO_EMAIL },
-    });
+    // HU16: el usuario demo inicia sesión de verdad (ya no es implícito).
+    const demo = await sesionDemo(app, prisma);
     demoId = demo.id;
+    demoToken = demo.token;
   });
 
   afterAll(async () => {
@@ -59,6 +60,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('devuelve la lista vacía con meta.total 0 (no una lista en blanco)', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?tipo=PERDIDA')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toEqual([]);
@@ -68,6 +70,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('HU7 AC2: también devuelve vacía la lista de ENCONTRADA', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?tipo=ENCONTRADA')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toEqual([]);
@@ -146,6 +149,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('AC1: lista solo PERDIDA, de más a menos reciente, con foto principal', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?tipo=PERDIDA')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toHaveLength(2);
@@ -178,6 +182,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('HU9: al propietario le sirve coordenadas exactas y a terceros aproximadas', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?tipo=PERDIDA')
+        .set(auth(demoToken))
         .expect(200);
 
       const propietario = res.body.items.find(
@@ -195,14 +200,32 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
       expect(ajeno.longitud).toBe(-66.99);
     });
 
+    it('HU16: sin sesión el listado es público y todas las coordenadas son aproximadas', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/reportes?tipo=PERDIDA')
+        .expect(200);
+      const delDemo = res.body.items.find(
+        (i: { id: string }) => i.id === perdidaRecienteId,
+      );
+      expect(delDemo.esPropietario).toBe(false);
+      expect(delDemo.latitud).toBe(10.5);
+      expect(
+        res.body.items.every((i: { esPropietario: boolean }) => !i.esPropietario),
+      ).toBe(true);
+      expect(JSON.stringify(res.body)).not.toContain('propietarioId');
+      expect(JSON.stringify(res.body)).not.toContain(demoId);
+    });
+
     it('AC3: desde el listado, el detalle del reporte responde con sus datos básicos', async () => {
       const listado = await request(app.getHttpServer())
         .get('/reportes?tipo=PERDIDA')
+        .set(auth(demoToken))
         .expect(200);
 
       const id = listado.body.items[0].id;
       const detalle = await request(app.getHttpServer())
         .get(`/reportes/${id}`)
+        .set(auth(demoToken))
         .expect(200);
 
       expect(detalle.body).toMatchObject({
@@ -220,6 +243,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('paginación: page/limit recortan los items y reflejan meta', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?tipo=PERDIDA&page=1&limit=1')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toHaveLength(1);
@@ -234,6 +258,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('HU7 AC1: lista ENCONTRADA de más a menos reciente, sin reportes perdidos', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?tipo=ENCONTRADA')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toHaveLength(1);
@@ -250,11 +275,13 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('HU7 AC3: desde el listado de encontradas, el detalle responde con sus datos', async () => {
       const listado = await request(app.getHttpServer())
         .get('/reportes?tipo=ENCONTRADA')
+        .set(auth(demoToken))
         .expect(200);
 
       const id = listado.body.items[0].id;
       const detalle = await request(app.getHttpServer())
         .get(`/reportes/${id}`)
+        .set(auth(demoToken))
         .expect(200);
 
       expect(detalle.body).toMatchObject({
@@ -269,6 +296,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('HU7: sin tipo lista ambos tipos a la vez', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toHaveLength(3);
@@ -280,12 +308,15 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('valida los query params: page y limit fuera de rango', async () => {
       await request(app.getHttpServer())
         .get('/reportes?tipo=PERDIDA&page=0')
+        .set(auth(demoToken))
         .expect(400);
       await request(app.getHttpServer())
         .get('/reportes?tipo=PERDIDA&limit=100')
+        .set(auth(demoToken))
         .expect(400);
       await request(app.getHttpServer())
         .get('/reportes?tipo=PERDIDA&foo=bar')
+        .set(auth(demoToken))
         .expect(400);
     });
   });
@@ -360,6 +391,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('AC1: especie + color se combinan con AND (no OR)', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?especie=perro&color=negro')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toHaveLength(1);
@@ -370,6 +402,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('AC1: un filtro extra que no se cumpe descarta el resto', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?especie=perro&color=negro&raza=pastor')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toEqual([]);
@@ -379,6 +412,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('HU8: los filtros de texto son tolerantes a mayúsculas y acentos', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?especie=PERRO&color=MARRON')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toHaveLength(1);
@@ -389,6 +423,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
       // Centro en el océano, lejos de todo lo sembrado.
       const res = await request(app.getHttpServer())
         .get('/reportes?lat=5&lng=-60&radioKm=10')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(res.body.items).toEqual([]);
@@ -399,6 +434,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
       // Desde perroNegro: perroMarron está a ~1.11 km → dentro de radio 50.
       const cerca = await request(app.getHttpServer())
         .get('/reportes?lat=10.5&lng=-66.5&radioKm=50')
+        .set(auth(demoToken))
         .expect(200);
 
       const ids = cerca.body.items.map((i: { id: string }) => i.id);
@@ -408,6 +444,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
       // Radio de 1 km: perroMarron (1.11 km) queda fuera, solo queda el centro.
       const muyCerca = await request(app.getHttpServer())
         .get('/reportes?lat=10.5&lng=-66.5&radioKm=1')
+        .set(auth(demoToken))
         .expect(200);
 
       expect(muyCerca.body.items).toHaveLength(1);
@@ -417,6 +454,7 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('HU8: radio con especie combinados siguen la lógica AND', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?especie=gato&lat=10.5&lng=-66.5&radioKm=50')
+        .set(auth(demoToken))
         .expect(200);
 
       // El gato está a cientos de km y sin coordenadas: no pasa ninguno.
@@ -427,36 +465,45 @@ describe('HU6 — GET /reportes (listado de reportes perdidos)', () => {
     it('HU8: lat/lng/radioKm deben enviarse juntos (400 si falta alguno)', async () => {
       await request(app.getHttpServer())
         .get('/reportes?lat=10.5')
+        .set(auth(demoToken))
         .expect(400);
       await request(app.getHttpServer())
         .get('/reportes?lat=10.5&lng=-66.5')
+        .set(auth(demoToken))
         .expect(400);
       await request(app.getHttpServer())
         .get('/reportes?radioKm=5')
+        .set(auth(demoToken))
         .expect(400);
       await request(app.getHttpServer())
         .get('/reportes?lng=-66.5&radioKm=5')
+        .set(auth(demoToken))
         .expect(400);
     });
 
     it('HU8: valida rangos de lat, lng y radioKm', async () => {
       await request(app.getHttpServer())
         .get('/reportes?lat=100&lng=-66.5&radioKm=5')
+        .set(auth(demoToken))
         .expect(400);
       await request(app.getHttpServer())
         .get('/reportes?lat=10.5&lng=-200&radioKm=5')
+        .set(auth(demoToken))
         .expect(400);
       await request(app.getHttpServer())
         .get('/reportes?lat=10.5&lng=-66.5&radioKm=0')
+        .set(auth(demoToken))
         .expect(400);
       await request(app.getHttpServer())
         .get('/reportes?lat=10.5&lng=-66.5&radioKm=150')
+        .set(auth(demoToken))
         .expect(400);
     });
 
     it('HU8: pagina sobre el resultado filtrado con el total real', async () => {
       const res = await request(app.getHttpServer())
         .get('/reportes?especie=perro&limit=1&page=2')
+        .set(auth(demoToken))
         .expect(200);
 
       // 2 perros en total; page=2 con limit=1 → el más antiguo.

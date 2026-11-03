@@ -68,7 +68,7 @@ export class ReportesService {
     return this.toResponse(reporte, user.id);
   }
 
-  async findById(id: string, userId: string): Promise<ReporteResponse | null> {
+  async findById(id: string, userId: string | null): Promise<ReporteResponse | null> {
     const reporte = await this.prisma.reporte.findUnique({
       where: { id },
       include: { fotos: { orderBy: { orden: 'asc' } } },
@@ -230,8 +230,9 @@ export class ReportesService {
 
   async list(
     dto: ListReportesDto,
-    user: Usuario,
+    user: Usuario | null,
   ): Promise<ListReportesResponse> {
+    const userId = user?.id ?? null;
     const page = dto.page ?? 1;
     const limit = dto.limit ?? 20;
 
@@ -269,7 +270,7 @@ export class ReportesService {
       ]);
 
       return {
-        items: reportes.map((r) => this.toListItem(r, user.id)),
+        items: reportes.map((r) => this.toListItem(r, userId)),
         meta: {
           page,
           limit,
@@ -314,7 +315,7 @@ export class ReportesService {
       .filter((r): r is Reporte & { fotos: Fotografia[] } => r !== undefined);
 
     return {
-      items: ordenados.map((r) => this.toListItem(r, user.id)),
+      items: ordenados.map((r) => this.toListItem(r, userId)),
       meta: {
         page,
         limit,
@@ -389,7 +390,7 @@ export class ReportesService {
 
   private toListItem(
     reporte: Reporte & { fotos: Fotografia[] },
-    userId: string,
+    userId: string | null,
   ): ReporteListItem {
     const { latitud, longitud, esPropietario } = this.coordsParaUsuario(
       reporte,
@@ -422,7 +423,7 @@ export class ReportesService {
    */
   private coordsParaUsuario(
     reporte: Pick<Reporte, 'latitud' | 'longitud' | 'propietarioId'>,
-    userId: string,
+    userId: string | null,
   ): { latitud: number | null; longitud: number | null; esPropietario: boolean } {
     const esPropietario = reporte.propietarioId === userId;
     if (esPropietario || reporte.latitud === null || reporte.longitud === null) {
@@ -455,7 +456,7 @@ export class ReportesService {
     };
   }
 
-  private toResponse(reporte: Reporte, userId: string): ReporteResponse {
+  private toResponse(reporte: Reporte, userId: string | null): ReporteResponse {
     const { latitud, longitud, esPropietario } = this.coordsParaUsuario(
       reporte,
       userId,
@@ -469,7 +470,6 @@ export class ReportesService {
       caracteristicasDistintivas: reporte.caracteristicasDistintivas ?? '',
       ubicacion: reporte.ubicacion,
       estado: reporte.estado as SharedEstadoReporte,
-      propietarioId: reporte.propietarioId,
       latitud,
       longitud,
       esPropietario,

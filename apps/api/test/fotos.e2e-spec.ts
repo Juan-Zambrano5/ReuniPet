@@ -6,7 +6,7 @@ import request from 'supertest';
 import sharp from 'sharp';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { DEMO_EMAIL } from '../src/usuarios/current-user.provider';
+import { auth, crearUsuarioConSesion, sesionDemo } from './helpers/sesion';
 
 const PNG_1x1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -17,6 +17,7 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
   let app: INestApplication;
   let prisma: PrismaService;
   let reporteId: string;
+  let demoToken: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -33,6 +34,8 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
     );
     await app.init();
     prisma = app.get(PrismaService);
+    // HU16: el usuario demo inicia sesión de verdad (ya no es implícito).
+    demoToken = (await sesionDemo(app, prisma)).token;
 
     const reporte = await prisma.reporte.create({
       data: {
@@ -41,15 +44,7 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
         color: 'Blanco',
         caracteristicasDistintivas: 'Collar verde',
         estado: 'PERDIDA',
-        // Sin X-User-Id la sesión simulada es el usuario demo: debe ser el
-        // dueño, porque solo el propietario puede subir fotos.
-        propietarioId: (
-          await prisma.usuario.upsert({
-            where: { email: DEMO_EMAIL },
-            update: {},
-            create: { nombre: 'Usuario Demo', email: DEMO_EMAIL },
-          })
-        ).id,
+        propietarioId: (await sesionDemo(app, prisma)).id,
       },
     });
     reporteId = reporte.id;
@@ -69,6 +64,7 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
   it('AC1: sube una imagen válida y la asocia al reporte', async () => {
     const res = await request(app.getHttpServer())
       .post(`/reportes/${reporteId}/fotos`)
+      .set(auth(demoToken))
       .attach('fotos', PNG_1x1, 'mascota.png')
       .expect(201);
 
@@ -85,6 +81,7 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
   it('AC2: devuelve 400 con mensaje claro si el archivo no es una imagen válida', async () => {
     const res = await request(app.getHttpServer())
       .post(`/reportes/${reporteId}/fotos`)
+      .set(auth(demoToken))
       .attach('fotos', Buffer.from('soy un archivo de texto'), 'notas.txt')
       .expect(400);
 
@@ -97,6 +94,7 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
 
     await request(app.getHttpServer())
       .post(`/reportes/${reporteId}/fotos`)
+      .set(auth(demoToken))
       .attach('fotos', PNG_1x1, 'segunda.png')
       .attach('fotos', PNG_1x1, 'tercera.png')
       .expect(201);
@@ -129,6 +127,7 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
       const padded = Buffer.concat([grande, Buffer.alloc(5 * 1024 * 1024)]);
       await request(app.getHttpServer())
         .post(`/reportes/${reporteId}/fotos`)
+        .set(auth(demoToken))
         .attach('fotos', padded, 'pesada.png')
         .expect(400);
       return;
@@ -136,31 +135,35 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
 
     await request(app.getHttpServer())
       .post(`/reportes/${reporteId}/fotos`)
+      .set(auth(demoToken))
       .attach('fotos', grande, 'pesada.png')
       .expect(400);
+  });
+
+  it('HU16: sin sesión → 401 y otro usuario → 403; no se agrega ninguna foto', async () => {
+    const antes = await prisma.fotografia.count({ where: { reporteId } });
+    await request(app.getHttpServer())
+      .post(`/reportes/${reporteId}/fotos`)
+      .attach('fotos', PNG_1x1, 'anonima.png')
+      .expect(401);
+    const intruso = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Intruso Fotos',
+      email: `intruso-fotos-${Date.now()}@test.dev`,
+    });
+    await request(app.getHttpServer())
+      .post(`/reportes/${reporteId}/fotos`)
+      .set(auth(intruso.token))
+      .attach('fotos', PNG_1x1, 'ajena.png')
+      .expect(403);
+    expect(await prisma.fotografia.count({ where: { reporteId } })).toBe(antes);
+    await prisma.usuario.delete({ where: { id: intruso.id } });
   });
 
   it('devuelve 400 si el reporte no existe', async () => {
     await request(app.getHttpServer())
       .post('/reportes/no-existe/fotos')
+      .set(auth(demoToken))
       .attach('fotos', PNG_1x1, 'x.png')
       .expect(400);
-  });
-
-  it('quien no es el propietario recibe 403 y no se agrega ninguna foto', async () => {
-    const antes = await prisma.fotografia.count({ where: { reporteId } });
-    const intruso = await prisma.usuario.create({
-      data: {
-        nombre: 'Intruso Fotos',
-        email: `intruso-fotos-${Date.now()}@test.dev`,
-      },
-    });
-    await request(app.getHttpServer())
-      .post(`/reportes/${reporteId}/fotos`)
-      .set('X-User-Id', intruso.id)
-      .attach('fotos', PNG_1x1, 'ajena.png')
-      .expect(403);
-    expect(await prisma.fotografia.count({ where: { reporteId } })).toBe(antes);
-    await prisma.usuario.delete({ where: { id: intruso.id } });
   });
 });

@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { auth, crearUsuarioConSesion } from './helpers/sesion';
 
 const ANA_EMAIL = 'ana-mis-reportes@test.dev';
 const BETO_EMAIL = 'beto-mis-reportes@test.dev';
@@ -24,6 +25,8 @@ describe('HU15 — GET /usuarios/me/reportes', () => {
   let prisma: PrismaService;
   let anaId: string;
   let betoId: string;
+  let anaToken: string;
+  let betoToken: string;
 
   async function limpiarReportes(): Promise<void> {
     const ids = [anaId, betoId].filter(Boolean);
@@ -72,10 +75,10 @@ describe('HU15 — GET /usuarios/me/reportes', () => {
     return r.id;
   }
 
-  function misReportes(userId: string): Promise<MiReporte[]> {
+  function misReportes(token: string): Promise<MiReporte[]> {
     return request(app.getHttpServer())
       .get('/usuarios/me/reportes')
-      .set('X-User-Id', userId)
+      .set(auth(token))
       .expect(200)
       .then((res) => res.body as MiReporte[]);
   }
@@ -105,12 +108,18 @@ describe('HU15 — GET /usuarios/me/reportes', () => {
       where: { email: { in: [ANA_EMAIL, BETO_EMAIL] } },
     });
 
-    anaId = (
-      await prisma.usuario.create({ data: { nombre: 'Ana', email: ANA_EMAIL } })
-    ).id;
-    betoId = (
-      await prisma.usuario.create({ data: { nombre: 'Beto', email: BETO_EMAIL } })
-    ).id;
+    const ana = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Ana',
+      email: ANA_EMAIL,
+    });
+    const beto = await crearUsuarioConSesion(app, prisma, {
+      nombre: 'Beto',
+      email: BETO_EMAIL,
+    });
+    anaId = ana.id;
+    anaToken = ana.token;
+    betoId = beto.id;
+    betoToken = beto.token;
   });
 
   afterEach(async () => {
@@ -142,7 +151,7 @@ describe('HU15 — GET /usuarios/me/reportes', () => {
       data: { reporteId: nuevo, url: '/files/nuevo.webp', orden: 0 },
     });
 
-    const items = await misReportes(anaId);
+    const items = await misReportes(anaToken);
 
     expect(items.map((i) => i.id)).toEqual([nuevo, medio, viejo]);
     expect(items.map((i) => i.estado)).toEqual([
@@ -159,7 +168,7 @@ describe('HU15 — GET /usuarios/me/reportes', () => {
     // El RECUPERADA no está en el listado público, pero sí en "mis reportes".
     const publico = await request(app.getHttpServer())
       .get('/reportes?limit=50')
-      .set('X-User-Id', anaId)
+      .set(auth(anaToken))
       .expect(200);
     const idsPublicos = (publico.body as { items: { id: string }[] }).items.map(
       (i) => i.id,
@@ -199,37 +208,37 @@ describe('HU15 — GET /usuarios/me/reportes', () => {
       ],
     });
 
-    const [item] = await misReportes(anaId);
+    const [item] = await misReportes(anaToken);
     expect(item.id).toBe(perdida);
     expect(item.coincidenciasPendientes).toBe(2);
 
     // Es el mismo número que el usuario ve al ir a /alertas.
     const alertas = await request(app.getHttpServer())
       .get('/usuarios/me/alertas')
-      .set('X-User-Id', anaId)
+      .set(auth(anaToken))
       .expect(200);
     expect(alertas.body).toHaveLength(2);
 
     // Al marcar su reporte RECUPERADA deja de mostrar pendientes.
     await request(app.getHttpServer())
       .patch(`/reportes/${perdida}/estado`)
-      .set('X-User-Id', anaId)
+      .set(auth(anaToken))
       .send({ estado: 'RECUPERADA' })
       .expect(200);
-    const [cerrado] = await misReportes(anaId);
+    const [cerrado] = await misReportes(anaToken);
     expect(cerrado.coincidenciasPendientes).toBe(0);
   });
 
   it('AC3: un usuario sin reportes recibe una lista vacía', async () => {
-    await expect(misReportes(anaId)).resolves.toEqual([]);
+    await expect(misReportes(anaToken)).resolves.toEqual([]);
   });
 
   it('AC3: aislamiento — cada usuario ve solo los suyos', async () => {
     const deAna = await crear(anaId);
     const deBeto = await crear(betoId, { tipo: 'ENCONTRADA' });
 
-    const ana = await misReportes(anaId);
-    const beto = await misReportes(betoId);
+    const ana = await misReportes(anaToken);
+    const beto = await misReportes(betoToken);
 
     expect(ana.map((i) => i.id)).toEqual([deAna]);
     expect(beto.map((i) => i.id)).toEqual([deBeto]);
@@ -239,17 +248,22 @@ describe('HU15 — GET /usuarios/me/reportes', () => {
     await crear(anaId);
     const res = await request(app.getHttpServer())
       .get('/usuarios/me/reportes')
-      .set('X-User-Id', anaId)
+      .set(auth(anaToken))
       .expect(200);
     const texto = JSON.stringify(res.body);
     expect(texto).not.toContain(ANA_EMAIL);
     expect(texto).not.toMatch(/telefono|passwordHash/);
   });
 
-  it('un X-User-Id inexistente → 401', async () => {
+  it('HU16: sin token, con token alterado o solo con X-User-Id → 401', async () => {
+    await request(app.getHttpServer()).get('/usuarios/me/reportes').expect(401);
     await request(app.getHttpServer())
       .get('/usuarios/me/reportes')
-      .set('X-User-Id', '00000000-0000-0000-0000-000000000000')
+      .set(auth(`${anaToken}x`))
+      .expect(401);
+    await request(app.getHttpServer())
+      .get('/usuarios/me/reportes')
+      .set('X-User-Id', anaId)
       .expect(401);
   });
 });

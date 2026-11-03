@@ -2,10 +2,15 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Bell, PawPrint, User } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Bell, LogOut, PawPrint, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { SESION_EVENTO, leerNombreSesion } from '@/lib/api';
+import {
+  SESION_EVENTO,
+  cerrarSesion,
+  leerNombreSesion,
+  limpiarSesionAntigua,
+} from '@/lib/sesion';
 
 interface NavLink {
   href: string;
@@ -43,10 +48,13 @@ const LINKS: NavLink[] = [
 
 export function AppNavbar(): React.JSX.Element {
   const pathname = usePathname();
-  // HU12: nombre de la sesión simulada. Se lee tras montar (localStorage no
-  // existe en el servidor) y se refresca al registrarse u otra pestaña.
+  const router = useRouter();
+  // HU16: nombre de la sesión (token JWT). Se lee tras montar (localStorage no
+  // existe en el servidor) y se refresca al entrar, salir u otra pestaña.
   const [nombre, setNombre] = React.useState<string | null>(null);
   React.useEffect(() => {
+    // SPRINT4_PLAN §3.12: la sesión simulada anterior (x-user-id) se descarta.
+    limpiarSesionAntigua();
     const leer = (): void => setNombre(leerNombreSesion());
     leer();
     window.addEventListener(SESION_EVENTO, leer);
@@ -112,11 +120,11 @@ export function AppNavbar(): React.JSX.Element {
           </Link>
           {!inicial ? (
             <Link
-              href="/registro"
-              aria-current={pathname.startsWith('/registro') ? 'page' : undefined}
+              href="/login"
+              aria-current={pathname.startsWith('/login') ? 'page' : undefined}
               className="whitespace-nowrap rounded-control px-2 py-1 text-sm font-medium text-primary transition-colors hover:bg-primary-soft"
             >
-              Crear cuenta
+              Iniciar sesión
             </Link>
           ) : null}
           <span
@@ -132,6 +140,21 @@ export function AppNavbar(): React.JSX.Element {
               <User className="h-5 w-5" aria-hidden />
             )}
           </span>
+          {inicial ? (
+            <button
+              type="button"
+              onClick={() => {
+                cerrarSesion();
+                router.push('/');
+              }}
+              aria-label="Cerrar sesión"
+              title="Cerrar sesión"
+              className="flex items-center gap-1 whitespace-nowrap rounded-control p-2 text-sm font-medium text-muted transition-colors hover:bg-primary-soft hover:text-primary"
+            >
+              <LogOut className="h-5 w-5" aria-hidden />
+              <span className="hidden sm:inline">Cerrar sesión</span>
+            </button>
+          ) : null}
         </div>
       </div>
     </header>
