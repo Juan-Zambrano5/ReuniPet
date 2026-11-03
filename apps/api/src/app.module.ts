@@ -6,6 +6,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
 import { ReportesModule } from './reportes/reportes.module';
 import { MatchingModule } from './matching/matching.module';
 import { AlertasModule } from './alertas/alertas.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { AlertasModule } from './alertas/alertas.module';
     ReportesModule,
     MatchingModule,
     AlertasModule,
+    AuthModule,
   ],
 })
 export class AppModule {}

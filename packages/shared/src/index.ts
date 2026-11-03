@@ -122,3 +122,20 @@ export interface ContactoPropietarioResponse {
   email: string;
   telefono: string | null;
 }
+
+// HU12: registro de usuarios (POST /auth/register).
+export interface RegisterInput {
+  nombre: string;
+  email: string;
+  telefono?: string;
+  password: string;
+}
+
+// Datos públicos de un usuario: nunca incluye contraseña ni hash.
+export interface UsuarioPublicoResponse {
+  id: string;
+  nombre: string;
+  email: string;
+  telefono: string | null;
+  createdAt: string;
+}

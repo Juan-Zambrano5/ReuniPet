@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Bell, PawPrint, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SESION_EVENTO, leerNombreSesion } from '@/lib/api';
 
 interface NavLink {
   href: string;
@@ -37,6 +38,20 @@ const LINKS: NavLink[] = [
 
 export function AppNavbar(): React.JSX.Element {
   const pathname = usePathname();
+  // HU12: nombre de la sesión simulada. Se lee tras montar (localStorage no
+  // existe en el servidor) y se refresca al registrarse u otra pestaña.
+  const [nombre, setNombre] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    const leer = (): void => setNombre(leerNombreSesion());
+    leer();
+    window.addEventListener(SESION_EVENTO, leer);
+    window.addEventListener('storage', leer);
+    return () => {
+      window.removeEventListener(SESION_EVENTO, leer);
+      window.removeEventListener('storage', leer);
+    };
+  }, []);
+  const inicial = nombre?.trim().charAt(0).toUpperCase() || null;
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-white shadow-card">
@@ -90,11 +105,27 @@ export function AppNavbar(): React.JSX.Element {
           >
             <Bell className="h-5 w-5" aria-hidden />
           </Link>
+          {!inicial ? (
+            <Link
+              href="/registro"
+              aria-current={pathname.startsWith('/registro') ? 'page' : undefined}
+              className="whitespace-nowrap rounded-control px-2 py-1 text-sm font-medium text-primary transition-colors hover:bg-primary-soft"
+            >
+              Crear cuenta
+            </Link>
+          ) : null}
           <span
-            aria-label="Avatar de usuario"
+            aria-label={nombre ? `Usuario: ${nombre}` : 'Avatar de usuario'}
+            title={nombre ?? undefined}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-soft text-primary"
           >
-            <User className="h-5 w-5" aria-hidden />
+            {inicial ? (
+              <span className="text-sm font-semibold" aria-hidden>
+                {inicial}
+              </span>
+            ) : (
+              <User className="h-5 w-5" aria-hidden />
+            )}
           </span>
         </div>
       </div>

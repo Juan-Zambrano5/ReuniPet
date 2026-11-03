@@ -4,8 +4,10 @@ import {
   CreateReporteInput,
   EstadoReporte,
   ListReportesResponse,
+  RegisterInput,
   ReporteResponse,
   TipoReporte,
+  UsuarioPublicoResponse,
 } from '@reunipet/shared';
 
 const API_URL_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
@@ -23,8 +25,49 @@ export class ApiError extends Error {
 
 export function getSessionHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {};
-  const userId = window.localStorage.getItem('x-user-id');
+  const userId = window.localStorage.getItem(SESION_ID_KEY);
   return userId ? { 'X-User-Id': userId } : {};
+}
+
+// HU12: sesión SIMULADA (AGENTS.md §3 y §10.3). Tras registrarse se guarda el
+// id del usuario en localStorage y viaja como header X-User-Id.
+// ADVERTENCIA: X-User-Id es FALSIFICABLE hasta HU16 (login + JWT, Sprint 4):
+// cualquiera puede enviar el id de otro usuario. La regla "solo el
+// propietario" protege contra errores de uso, NO contra un atacante.
+// Nunca se guarda la contraseña: solo id y nombre (para la barra).
+export const SESION_ID_KEY = 'x-user-id';
+export const SESION_NOMBRE_KEY = 'x-user-nombre';
+export const SESION_EVENTO = 'reunipet:sesion';
+
+export function guardarSesion(
+  usuario: Pick<UsuarioPublicoResponse, 'id' | 'nombre'>,
+): void {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(SESION_ID_KEY, usuario.id);
+  window.localStorage.setItem(SESION_NOMBRE_KEY, usuario.nombre);
+  // Avisa a la barra de navegación (misma pestaña) que cambió la sesión.
+  window.dispatchEvent(new Event(SESION_EVENTO));
+}
+
+export function leerNombreSesion(): string | null {
+  if (typeof window === 'undefined') return null;
+  if (!window.localStorage.getItem(SESION_ID_KEY)) return null;
+  return window.localStorage.getItem(SESION_NOMBRE_KEY);
+}
+
+// HU12: POST /auth/register. La respuesta nunca trae contraseña ni hash.
+export async function registrarUsuario(
+  input: RegisterInput,
+): Promise<UsuarioPublicoResponse> {
+  const res = await fetch(`${API_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.json().catch(() => ({})));
+  }
+  return (await res.json()) as UsuarioPublicoResponse;
 }
 
 export async function createReporte(
