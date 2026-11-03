@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   AlertaResponse,
   ContactoPropietarioResponse,
+  EstadoCoincidencia,
   ReporteResponse,
 } from '@reunipet/shared';
 import { ErrorText } from '@/components/ErrorText';
@@ -17,6 +18,7 @@ import {
   getAlertas,
   getContacto,
   getReporte,
+  marcarVista,
 } from '@/lib/api';
 
 export default function ComparadorPage(): React.JSX.Element {
@@ -40,6 +42,10 @@ export default function ComparadorPage(): React.JSX.Element {
     null,
   );
 
+  // HU4 AC3: abrir la coincidencia la marca como VISTA una sola vez por
+  // alerta (el ref evita la doble llamada del efecto en modo estricto).
+  const marcadaRef = React.useRef<string | null>(null);
+
   React.useEffect(() => {
     let cancelado = false;
     void (async () => {
@@ -57,6 +63,16 @@ export default function ComparadorPage(): React.JSX.Element {
           getReporte(encontrada.reportePerdida.id),
           getReporte(encontrada.reporteEncontrada.id),
         ]);
+        if (
+          encontrada.estado === EstadoCoincidencia.PENDIENTE &&
+          marcadaRef.current !== encontrada.coincidenciaId
+        ) {
+          marcadaRef.current = encontrada.coincidenciaId;
+          // Si falla, la alerta sigue como nueva; no bloquea el comparador.
+          void marcarVista(encontrada.coincidenciaId).catch(() => {
+            marcadaRef.current = null;
+          });
+        }
         if (!cancelado) {
           setAlerta(encontrada);
           setReportePerdida(perdida);

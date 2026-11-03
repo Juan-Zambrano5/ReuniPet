@@ -8,6 +8,8 @@ interface AlertCardProps {
   onDescartar: () => void;
   descartando?: boolean;
   id?: string;
+  // HU4: una alerta ya vista no se presenta como nueva.
+  nueva?: boolean;
 }
 
 export function AlertCard({
@@ -18,6 +20,7 @@ export function AlertCard({
   onDescartar,
   descartando,
   id,
+  nueva = true,
 }: AlertCardProps): React.JSX.Element {
   return (
     <article
@@ -25,6 +28,15 @@ export function AlertCard({
       data-testid={id ? `alerta-${id}` : 'alerta-card'}
     >
       <div>
+        <span
+          className={cn(
+            'mb-2 inline-flex items-center rounded-pill px-2 py-0.5 text-xs font-semibold',
+            nueva ? 'bg-primary text-white' : 'bg-white text-muted',
+          )}
+          data-testid="alerta-estado"
+        >
+          {nueva ? 'Nueva' : 'Vista'}
+        </span>
         <p className="font-medium text-text">{mensaje}</p>
         <p className="mt-1 text-sm text-muted">{descripcionReporte}</p>
         <p className="mt-2 text-xs text-muted">{tiempo}</p>

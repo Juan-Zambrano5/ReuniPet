@@ -91,7 +91,13 @@ export class AlertasService {
     coincidenciaId: string,
     userId: string,
   ): Promise<AlertaResponse> {
-    await this.buscarPropia(coincidenciaId, userId);
+    const existente = await this.buscarPropia(coincidenciaId, userId);
+
+    // HU4 AC3: idempotente. Solo PENDIENTE pasa a VISTA; si ya está VISTA no
+    // se toca, y una DESCARTADA nunca se "revive" al abrirla.
+    if (existente.estado !== EstadoCoincidencia.PENDIENTE) {
+      return this.toResponse(existente);
+    }
 
     const actualizada = await this.prisma.coincidencia.update({
       where: { id: coincidenciaId },

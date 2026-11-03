@@ -206,6 +206,26 @@ describe('HU4 — Alertas de coincidencia', () => {
       expect(c.estado).toBe('PENDIENTE');
     });
 
+    it('AC3: abrir dos veces es idempotente y no revive una descartada', async () => {
+      const id = await nuevaAlertaPendiente();
+      await request(app.getHttpServer()).patch(`/alertas/${id}/visto`).expect(200);
+      const antes = await prisma.coincidencia.findUniqueOrThrow({ where: { id } });
+      const otra = await request(app.getHttpServer())
+        .patch(`/alertas/${id}/visto`)
+        .expect(200);
+      expect((otra.body as { estado: string }).estado).toBe('VISTA');
+      const despues = await prisma.coincidencia.findUniqueOrThrow({ where: { id } });
+      expect(despues).toEqual(antes);
+
+      await request(app.getHttpServer())
+        .patch(`/alertas/${id}/descartar`)
+        .expect(200);
+      const reabierta = await request(app.getHttpServer())
+        .patch(`/alertas/${id}/visto`)
+        .expect(200);
+      expect((reabierta.body as { estado: string }).estado).toBe('DESCARTADA');
+    });
+
     it('el dueño sí puede marcarla como vista y descartarla', async () => {
       const id = await nuevaAlertaPendiente();
       const visto = await request(app.getHttpServer())

@@ -139,4 +139,24 @@ describe('AlertasService (HU4)', () => {
     );
     expect(prismaMock.coincidencia.update).not.toHaveBeenCalled();
   });
+
+  it('AC3: marcarVista es idempotente — una alerta VISTA no se vuelve a escribir', async () => {
+    prismaMock.coincidencia.findUnique.mockResolvedValue({
+      ...baseCoincidencia,
+      estado: 'VISTA',
+    });
+    const result = await service.marcarVista('coin-1', 'user-1');
+    expect(result.estado).toBe('VISTA');
+    expect(prismaMock.coincidencia.update).not.toHaveBeenCalled();
+  });
+
+  it('marcarVista no revive una alerta DESCARTADA', async () => {
+    prismaMock.coincidencia.findUnique.mockResolvedValue({
+      ...baseCoincidencia,
+      estado: 'DESCARTADA',
+    });
+    const result = await service.marcarVista('coin-1', 'user-1');
+    expect(result.estado).toBe('DESCARTADA');
+    expect(prismaMock.coincidencia.update).not.toHaveBeenCalled();
+  });
 });

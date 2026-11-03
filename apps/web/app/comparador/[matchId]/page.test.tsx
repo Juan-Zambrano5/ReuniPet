@@ -6,6 +6,7 @@ import {
   getAlertas,
   getContacto,
   getReporte,
+  marcarVista,
 } from '@/lib/api';
 
 jest.mock('@/lib/api', () => ({
@@ -13,6 +14,7 @@ jest.mock('@/lib/api', () => ({
   getReporte: jest.fn(),
   getContacto: jest.fn(),
   descartarAlerta: jest.fn(),
+  marcarVista: jest.fn().mockResolvedValue(undefined),
   fotoUrl: (url: string) => url,
 }));
 
@@ -25,6 +27,7 @@ jest.mock('next/navigation', () => ({
 const getAlertasMock = getAlertas as jest.Mock;
 const getReporteMock = getReporte as jest.Mock;
 const getContactoMock = getContacto as jest.Mock;
+const marcarVistaMock = marcarVista as jest.Mock;
 
 const alerta = {
   coincidenciaId: 'match-1',
@@ -172,5 +175,37 @@ describe('Comparador (HU10 — información de contacto)', () => {
     // Ambos reportes sin fotos: mensaje en las dos tarjetas, nunca un
     // espacio roto.
     expect(await screen.findAllByText('Sin fotografía')).toHaveLength(2);
+  });
+});
+
+describe('Comparador (HU4 AC3 — abrir marca la alerta como vista)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    marcarVistaMock.mockResolvedValue({ ...alerta, estado: 'VISTA' });
+    getReporteMock
+      .mockResolvedValueOnce(reportePerdida)
+      .mockResolvedValueOnce(reporteEncontrada);
+  });
+
+  it('abrir una alerta PENDIENTE llama a marcarVista una sola vez', async () => {
+    getAlertasMock.mockResolvedValue([alerta]);
+    render(<ComparadorPage />);
+    await screen.findByTestId('boton-contactar');
+    await waitFor(() => expect(marcarVistaMock).toHaveBeenCalledTimes(1));
+    expect(marcarVistaMock).toHaveBeenCalledWith('match-1');
+  });
+
+  it('reabrir una alerta ya VISTA no vuelve a llamar al API', async () => {
+    getAlertasMock.mockResolvedValue([{ ...alerta, estado: 'VISTA' }]);
+    render(<ComparadorPage />);
+    await screen.findByTestId('boton-contactar');
+    expect(marcarVistaMock).not.toHaveBeenCalled();
+  });
+
+  it('si marcarVista falla, el comparador se muestra igual', async () => {
+    getAlertasMock.mockResolvedValue([alerta]);
+    marcarVistaMock.mockRejectedValue(new Error('caído'));
+    render(<ComparadorPage />);
+    expect(await screen.findByTestId('boton-contactar')).toBeEnabled();
   });
 });

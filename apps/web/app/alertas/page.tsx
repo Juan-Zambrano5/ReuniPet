@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertaResponse } from '@reunipet/shared';
+import { AlertaResponse, EstadoCoincidencia } from '@reunipet/shared';
 import { AlertCard } from '@/components/alertas/AlertCard';
 import { RecientesZona } from '@/components/alertas/RecientesZona';
 import { MapPin } from 'lucide-react';
@@ -119,6 +119,7 @@ export default function AlertasPage(): React.JSX.Element {
               onVer={() => handleVer(alerta)}
               onDescartar={() => handleDescartar(alerta.coincidenciaId)}
               descartando={descartandoId === alerta.coincidenciaId}
+              nueva={alerta.estado === EstadoCoincidencia.PENDIENTE}
             />
           ))}
         </div>
