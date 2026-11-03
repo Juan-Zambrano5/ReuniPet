@@ -25,13 +25,22 @@ export class AlertasController {
     return this.alertasService.getAlertasDeUsuario(user.id);
   }
 
+  // HU4: solo el dueño del reporte perdido puede gestionar su alerta.
   @Patch('alertas/:id/visto')
-  async marcarVista(@Param('id') id: string): Promise<AlertaResponse> {
-    return this.alertasService.marcarVista(id);
+  async marcarVista(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<AlertaResponse> {
+    const user = await this.currentUser.getUser(req);
+    return this.alertasService.marcarVista(id, user.id);
   }
 
   @Patch('alertas/:id/descartar')
-  async descartar(@Param('id') id: string): Promise<AlertaResponse> {
-    return this.alertasService.descartar(id);
+  async descartar(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<AlertaResponse> {
+    const user = await this.currentUser.getUser(req);
+    return this.alertasService.descartar(id, user.id);
   }
 }

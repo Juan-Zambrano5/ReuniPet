@@ -164,4 +164,58 @@ describe('HU4 — Alertas de coincidencia', () => {
       .patch('/alertas/no-existe/descartar')
       .expect(404);
   });
+
+  describe('seguridad: solo el dueño del reporte perdido gestiona su alerta', () => {
+    async function nuevaAlertaPendiente(): Promise<string> {
+      await prisma.coincidencia.deleteMany();
+      await crearParCoincidente();
+      const list = await request(app.getHttpServer())
+        .get('/usuarios/me/alertas')
+        .expect(200);
+      const alerta = (
+        list.body as { coincidenciaId: string; estado: string }[]
+      ).find((a) => a.estado === 'PENDIENTE');
+      if (!alerta) throw new Error('no se generó la alerta');
+      return alerta.coincidenciaId;
+    }
+
+    async function intruso(): Promise<string> {
+      const u = await prisma.usuario.create({
+        data: { nombre: 'Intruso', email: `intruso-${Date.now()}@test.com` },
+      });
+      return u.id;
+    }
+
+    it('otro usuario recibe 403 al marcarla como vista y el estado no cambia', async () => {
+      const id = await nuevaAlertaPendiente();
+      await request(app.getHttpServer())
+        .patch(`/alertas/${id}/visto`)
+        .set('X-User-Id', await intruso())
+        .expect(403);
+      const c = await prisma.coincidencia.findUniqueOrThrow({ where: { id } });
+      expect(c.estado).toBe('PENDIENTE');
+    });
+
+    it('otro usuario recibe 403 al descartarla y el estado no cambia', async () => {
+      const id = await nuevaAlertaPendiente();
+      await request(app.getHttpServer())
+        .patch(`/alertas/${id}/descartar`)
+        .set('X-User-Id', await intruso())
+        .expect(403);
+      const c = await prisma.coincidencia.findUniqueOrThrow({ where: { id } });
+      expect(c.estado).toBe('PENDIENTE');
+    });
+
+    it('el dueño sí puede marcarla como vista y descartarla', async () => {
+      const id = await nuevaAlertaPendiente();
+      const visto = await request(app.getHttpServer())
+        .patch(`/alertas/${id}/visto`)
+        .expect(200);
+      expect((visto.body as { estado: string }).estado).toBe('VISTA');
+      const desc = await request(app.getHttpServer())
+        .patch(`/alertas/${id}/descartar`)
+        .expect(200);
+      expect((desc.body as { estado: string }).estado).toBe('DESCARTADA');
+    });
+  });
 });

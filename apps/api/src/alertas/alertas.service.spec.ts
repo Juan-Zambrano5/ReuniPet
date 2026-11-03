@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { AlertasService } from './alertas.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -81,7 +81,7 @@ describe('AlertasService (HU4)', () => {
       estado: 'VISTA',
     });
 
-    const result = await service.marcarVista('coin-1');
+    const result = await service.marcarVista('coin-1', 'user-1');
 
     expect(prismaMock.coincidencia.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -94,7 +94,7 @@ describe('AlertasService (HU4)', () => {
 
   it('marcarVista lanza 404 si la alerta no existe', async () => {
     prismaMock.coincidencia.findUnique.mockResolvedValue(null);
-    await expect(service.marcarVista('no-existe')).rejects.toThrow(
+    await expect(service.marcarVista('no-existe', 'user-1')).rejects.toThrow(
       NotFoundException,
     );
   });
@@ -106,7 +106,7 @@ describe('AlertasService (HU4)', () => {
       estado: 'DESCARTADA',
     });
 
-    const result = await service.descartar('coin-1');
+    const result = await service.descartar('coin-1', 'user-1');
 
     expect(prismaMock.coincidencia.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -119,8 +119,24 @@ describe('AlertasService (HU4)', () => {
 
   it('descartar lanza 404 si la alerta no existe', async () => {
     prismaMock.coincidencia.findUnique.mockResolvedValue(null);
-    await expect(service.descartar('no-existe')).rejects.toThrow(
+    await expect(service.descartar('no-existe', 'user-1')).rejects.toThrow(
       NotFoundException,
     );
+  });
+
+  it('seguridad: otro usuario no puede marcar como vista la alerta (403) y nada cambia', async () => {
+    prismaMock.coincidencia.findUnique.mockResolvedValue(baseCoincidencia);
+    await expect(service.marcarVista('coin-1', 'intruso')).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(prismaMock.coincidencia.update).not.toHaveBeenCalled();
+  });
+
+  it('seguridad: otro usuario no puede descartar la alerta (403) y nada cambia', async () => {
+    prismaMock.coincidencia.findUnique.mockResolvedValue(baseCoincidencia);
+    await expect(service.descartar('coin-1', 'intruso')).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(prismaMock.coincidencia.update).not.toHaveBeenCalled();
   });
 });

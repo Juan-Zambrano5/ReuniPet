@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { EstadoCoincidencia } from '@prisma/client';
 import { AlertaResponse } from '@reunipet/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -47,7 +51,12 @@ export class AlertasService {
     }));
   }
 
-  async descartar(coincidenciaId: string): Promise<AlertaResponse> {
+  /**
+   * HU4 (seguridad): la alerta pertenece al dueño del reporte PERDIDA, que es
+   * quien la recibe en GET /usuarios/me/alertas. 404 si no existe; 403 si es
+   * de otro usuario (sin modificar nada).
+   */
+  private async buscarPropia(coincidenciaId: string, userId: string) {
     const existente = await this.prisma.coincidencia.findUnique({
       where: { id: coincidenciaId },
       include: { reportePerdida: true, reporteEncontrada: true },
@@ -55,6 +64,19 @@ export class AlertasService {
     if (!existente) {
       throw new NotFoundException('Alerta no encontrada');
     }
+    if (existente.reportePerdida.propietarioId !== userId) {
+      throw new ForbiddenException(
+        'Solo el dueño del reporte puede gestionar esta alerta',
+      );
+    }
+    return existente;
+  }
+
+  async descartar(
+    coincidenciaId: string,
+    userId: string,
+  ): Promise<AlertaResponse> {
+    await this.buscarPropia(coincidenciaId, userId);
 
     const actualizada = await this.prisma.coincidencia.update({
       where: { id: coincidenciaId },
@@ -65,14 +87,11 @@ export class AlertasService {
     return this.toResponse(actualizada);
   }
 
-  async marcarVista(coincidenciaId: string): Promise<AlertaResponse> {
-    const existente = await this.prisma.coincidencia.findUnique({
-      where: { id: coincidenciaId },
-      include: { reportePerdida: true, reporteEncontrada: true },
-    });
-    if (!existente) {
-      throw new NotFoundException('Alerta no encontrada');
-    }
+  async marcarVista(
+    coincidenciaId: string,
+    userId: string,
+  ): Promise<AlertaResponse> {
+    await this.buscarPropia(coincidenciaId, userId);
 
     const actualizada = await this.prisma.coincidencia.update({
       where: { id: coincidenciaId },
