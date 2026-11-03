@@ -30,6 +30,11 @@ const LINKS: NavLink[] = [
     isActive: (p) => p.startsWith('/mapa'),
   },
   {
+    href: '/mis-reportes',
+    label: 'Mis reportes',
+    isActive: (p) => p.startsWith('/mis-reportes'),
+  },
+  {
     href: '/comparador',
     label: 'Comparador Inteligente',
     isActive: (p) => /^\/comparador\/.+/.test(p),

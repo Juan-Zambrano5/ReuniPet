@@ -4,12 +4,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EstadoReporte, Fotografia, Prisma, Reporte, Usuario } from '@prisma/client';
+import {
+  EstadoCoincidencia,
+  EstadoReporte,
+  Fotografia,
+  Prisma,
+  Reporte,
+  Usuario,
+} from '@prisma/client';
 import {
   ContactoPropietarioResponse,
   EstadoReporte as SharedEstadoReporte,
   FotografiaResponse,
   ListReportesResponse,
+  MiReporteItem,
   ReporteListItem,
   ReporteResponse,
   TipoReporte,
@@ -178,6 +186,46 @@ export class ReportesService {
       email: reporte.propietario.email,
       telefono: reporte.propietario.telefono,
     };
+  }
+
+  /**
+   * HU15: reportes del usuario actual en TODOS los estados (incluidos los
+   * RECUPERADA), más reciente primero, sin paginación (aprobado).
+   * Solo filtra por propietarioId: nunca devuelve reportes de otros.
+   * coincidenciasPendientes replica el filtro de GET /usuarios/me/alertas
+   * para que el número coincida con lo que el usuario ve al abrir /alertas.
+   */
+  async listMine(user: Usuario): Promise<MiReporteItem[]> {
+    const reportes = await this.prisma.reporte.findMany({
+      where: { propietarioId: user.id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        fotos: { orderBy: { orden: 'asc' }, take: 1 },
+        _count: {
+          select: {
+            coincidenciasComoPerdida: {
+              where: {
+                estado: {
+                  in: [EstadoCoincidencia.PENDIENTE, EstadoCoincidencia.VISTA],
+                },
+                reporteEncontrada: {
+                  estado: { not: EstadoReporte.RECUPERADA },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return reportes.map((r) => ({
+      ...this.toListItem(r, user.id),
+      // Un reporte RECUPERADA no muestra alertas (HU11): cuenta 0.
+      coincidenciasPendientes:
+        r.estado === EstadoReporte.RECUPERADA
+          ? 0
+          : r._count.coincidenciasComoPerdida,
+    }));
   }
 
   async list(

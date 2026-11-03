@@ -104,7 +104,7 @@ describe('RegistroForm (HU12)', () => {
     llenar();
     fireEvent.click(screen.getByRole('button', { name: /crear cuenta/i }));
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/'));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/mis-reportes'));
     const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [
       string,
       RequestInit,

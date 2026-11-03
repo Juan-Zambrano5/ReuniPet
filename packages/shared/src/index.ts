@@ -139,3 +139,12 @@ export interface UsuarioPublicoResponse {
   telefono: string | null;
   createdAt: string;
 }
+
+// HU15: GET /usuarios/me/reportes — reportes propios (todos los estados).
+// coincidenciasPendientes cuenta lo mismo que muestra /alertas para ese
+// reporte: PENDIENTE o VISTA, sin descartadas ni reportes RECUPERADA. Las
+// alertas solo llegan al dueño del reporte PERDIDA (HU4), así que en reportes
+// ENCONTRADA el valor es siempre 0.
+export interface MiReporteItem extends ReporteListItem {
+  coincidenciasPendientes: number;
+}

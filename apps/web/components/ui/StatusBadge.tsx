@@ -1,6 +1,7 @@
+import { EstadoReporte } from '@reunipet/shared';
 import { cn } from '@/lib/utils';
 
-type StatusBadgeVariant = 'success' | 'danger' | 'neutral';
+export type StatusBadgeVariant = 'success' | 'danger' | 'neutral';
 
 interface StatusBadgeProps {
   variant: StatusBadgeVariant;
@@ -32,3 +33,13 @@ export function StatusBadge({
     </span>
   );
 }
+
+// Texto y variante del badge según el estado del reporte (detalle y mis reportes).
+export const BADGE_ESTADO: Record<
+  EstadoReporte,
+  { variante: StatusBadgeVariant; texto: string }
+> = {
+  [EstadoReporte.PERDIDA]: { variante: 'danger', texto: 'PERDIDO' },
+  [EstadoReporte.ENCONTRADA]: { variante: 'success', texto: 'ENCONTRADO' },
+  [EstadoReporte.RECUPERADA]: { variante: 'neutral', texto: 'RECUPERADO' },
+};

@@ -95,8 +95,7 @@ export function RegistroForm(): React.JSX.Element {
       });
       // Sesión simulada (falsificable hasta HU16): ver guardarSesion.
       guardarSesion(usuario);
-      // TODO(HU15): llevar a /mis-reportes cuando exista.
-      router.push('/');
+      router.push('/mis-reportes');
     } catch (error) {
       setErrores(erroresDelServidor(error));
       setEnviando(false);

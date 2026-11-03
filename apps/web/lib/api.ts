@@ -4,6 +4,7 @@ import {
   CreateReporteInput,
   EstadoReporte,
   ListReportesResponse,
+  MiReporteItem,
   RegisterInput,
   ReporteResponse,
   TipoReporte,
@@ -168,6 +169,16 @@ export async function getReportes(
   });
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
   return (await res.json()) as ListReportesResponse;
+}
+
+// HU15: reportes del usuario de la sesión (todos los estados).
+export async function getMisReportes(): Promise<MiReporteItem[]> {
+  const res = await fetch(`${API_URL}/usuarios/me/reportes`, {
+    headers: getSessionHeaders(),
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
+  return (await res.json()) as MiReporteItem[];
 }
 
 export async function getAlertas(): Promise<AlertaResponse[]> {

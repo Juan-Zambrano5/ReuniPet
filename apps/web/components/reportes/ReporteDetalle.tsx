@@ -8,19 +8,10 @@ import {
   TipoReporte,
 } from '@reunipet/shared';
 import { ErrorText } from '@/components/ErrorText';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { BADGE_ESTADO, StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { ApiError, cambiarEstadoReporte, fotoUrl, getReporte } from '@/lib/api';
 import { tiempoRelativo } from '@/lib/tiempo';
-
-const BADGE: Record<
-  EstadoReporte,
-  { variante: 'danger' | 'success' | 'neutral'; texto: string }
-> = {
-  [EstadoReporte.PERDIDA]: { variante: 'danger', texto: 'PERDIDO' },
-  [EstadoReporte.ENCONTRADA]: { variante: 'success', texto: 'ENCONTRADO' },
-  [EstadoReporte.RECUPERADA]: { variante: 'neutral', texto: 'RECUPERADO' },
-};
 
 interface ReporteDetalleProps {
   id: string;
@@ -148,7 +139,7 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
     );
   }
 
-  const badge = BADGE[reporte.estado];
+  const badge = BADGE_ESTADO[reporte.estado];
   const fotos = reporte.fotos ?? [];
   const fotoActual = fotos[fotoIndex];
 
