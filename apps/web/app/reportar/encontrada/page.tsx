@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { TipoReporte } from '@reunipet/shared';
 import { ReporteForm } from '@/components/reportes/ReporteForm';
 import {
@@ -8,9 +9,36 @@ import {
   type PuntoMapa,
 } from '@/components/reportes/MapaSelector';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { leerBorrador } from '@/lib/borrador';
 
 export default function ReportarEncontradaPage(): React.JSX.Element {
+  const router = useRouter();
   const [punto, setPunto] = React.useState<PuntoMapa | null>(null);
+  // El router del mock se crea nuevo en cada render: el ref garantiza que
+  // este efecto corra una sola vez (evita bucles de redirección).
+  const iniciadoRef = React.useRef(false);
+
+  // HU3: al volver del paso 2 se restaura el punto marcado en el mapa.
+  // Caso 2 (mismo criterio que HU1): si el reporte YA se creó (reporteId en
+  // el borrador), el paso 1 redirige al paso 2 — cubre también el botón
+  // Atrás del navegador y evita un segundo reporte.
+  React.useEffect(() => {
+    if (iniciadoRef.current) return;
+    iniciadoRef.current = true;
+    const borrador = leerBorrador();
+    // Un borrador de otro tipo no corresponde a esta página.
+    if (!borrador || borrador.tipo !== TipoReporte.ENCONTRADA) return;
+    if (borrador.reporteId) {
+      router.replace('/reportar/encontrada/fotos');
+      return;
+    }
+    if (
+      typeof borrador.latitud === 'number' &&
+      typeof borrador.longitud === 'number'
+    ) {
+      setPunto({ lat: borrador.latitud, lng: borrador.longitud });
+    }
+  }, [router]);
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8">

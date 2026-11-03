@@ -1,9 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Camera, ImageIcon, Trash2 } from 'lucide-react';
-import { FotografiaResponse } from '@reunipet/shared';
+import { FotografiaResponse, TipoReporte } from '@reunipet/shared';
 import { ErrorText } from '@/components/ErrorText';
 import { StepBadge } from '@/components/ui/StepBadge';
 import { TipCard } from '@/components/ui/TipCard';
@@ -19,6 +19,8 @@ import {
   guardarBorrador,
   leerBorrador,
   limpiarBorrador,
+  rutaPaso1,
+  rutaPaso2,
 } from '@/lib/borrador';
 
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -51,7 +53,7 @@ function mensajeDeError(err: unknown): string {
 }
 
 /**
- * Paso 2 de 2 del reporte de mascota perdida (HU1).
+ * Paso 2 de 2 del reporte de mascota perdida (HU1) o encontrada (HU3).
  *
  * Aquí se crea el reporte por primera vez: "Publicar reporte" hace
  * POST /reportes con los datos del borrador del paso 1 y, solo si la
@@ -60,6 +62,14 @@ function mensajeDeError(err: unknown): string {
  */
 export function FotosCarga(): React.JSX.Element {
   const router = useRouter();
+  const pathname = usePathname();
+
+  // La ruta decide el tipo: /reportar/encontrada/fotos → ENCONTRADA.
+  const tipo: TipoReporte = pathname?.includes('/encontrada')
+    ? TipoReporte.ENCONTRADA
+    : TipoReporte.PERDIDA;
+  const ruta1 = rutaPaso1(tipo);
+  const esEncontrada = tipo === TipoReporte.ENCONTRADA;
 
   const inputRef = React.useRef<HTMLInputElement>(null);
   const iniciadoRef = React.useRef(false);
@@ -80,10 +90,15 @@ export function FotosCarga(): React.JSX.Element {
     iniciadoRef.current = true;
     const datos = leerBorrador();
     if (!datos) {
-      router.replace('/reportar/perdida');
+      router.replace(ruta1);
       return;
     }
     setBorrador(datos);
+    // El borrador manda: si es de otro tipo, se navega a su paso 2.
+    if (datos.tipo !== tipo) {
+      router.replace(rutaPaso2(datos.tipo));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   React.useEffect(() => {
@@ -241,7 +256,9 @@ export function FotosCarga(): React.JSX.Element {
             descripcion="Agrega fotos de la mascota para mejorar las posibilidades de reencuentro"
           />
           <h1 className="mt-4 text-2xl font-bold text-text">
-            Reportar Mascota Perdida
+            {esEncontrada
+              ? 'Reportar Mascota Encontrada'
+              : 'Reportar Mascota Perdida'}
           </h1>
 
           <div className="mt-6 rounded-card border border-border bg-card p-6 shadow-card">
@@ -357,7 +374,7 @@ export function FotosCarga(): React.JSX.Element {
                   type="button"
                   variant="secondary"
                   className="sm:flex-1"
-                  onClick={() => router.push('/reportar/perdida')}
+                  onClick={() => router.push(ruta1)}
                   disabled={publicando}
                   data-testid="volver-paso-1"
                 >

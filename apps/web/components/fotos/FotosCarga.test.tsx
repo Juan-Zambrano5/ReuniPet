@@ -4,17 +4,42 @@ import { FotosCarga } from '@/components/fotos/FotosCarga';
 
 const push = jest.fn();
 const replace = jest.fn();
+/** Ruta actual de la página (mock de usePathname). */
+let mockPathname = '/reportar/perdida/fotos';
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace }),
+  usePathname: () => mockPathname,
 }));
 
 const DRAFT_KEY = 'reunipet:borrador-reporte';
 
-function guardarBorradorEnMemoria(): void {
+interface Caso {
+  tipo: 'PERDIDA' | 'ENCONTRADA';
+  ruta1: string;
+  titulo: string;
+}
+
+const CASOS: Caso[] = [
+  {
+    tipo: 'PERDIDA',
+    ruta1: '/reportar/perdida',
+    titulo: 'Reportar Mascota Perdida',
+  },
+  {
+    tipo: 'ENCONTRADA',
+    ruta1: '/reportar/encontrada',
+    titulo: 'Reportar Mascota Encontrada',
+  },
+];
+
+/** Caso activo: lo fija el beforeEach del describe parametrizado. */
+let caso: Caso = CASOS[0];
+
+function guardarBorradorEnMemoria(tipo: string = caso.tipo): void {
   window.sessionStorage.setItem(
     DRAFT_KEY,
     JSON.stringify({
-      tipo: 'PERDIDA',
+      tipo,
       especie: 'perro',
       raza: 'labrador',
       color: 'negro',
@@ -32,8 +57,8 @@ function leerDraft(): Record<string, unknown> | null {
 }
 
 /** Caso 2: el reporte ya se creó en un intento anterior. */
-function guardarBorradorConReporte(): void {
-  guardarBorradorEnMemoria();
+function guardarBorradorConReporte(tipo: string = caso.tipo): void {
+  guardarBorradorEnMemoria(tipo);
   const actual = leerDraft() ?? {};
   window.sessionStorage.setItem(
     DRAFT_KEY,
@@ -68,7 +93,6 @@ let fotosOk = true;
 /** Nombres de archivo que el backend rechaza (para simular fallo parcial). */
 let fotosFallidas: string[] = [];
 
-const REPORTE = { id: 'rep-uno', tipo: 'PERDIDA', estado: 'PERDIDA' };
 /** Ids únicos por subida para que las claves React no se dupliquen. */
 let secuenciaFoto = 0;
 
@@ -78,7 +102,11 @@ function mockFetch(): jest.Mock {
       const url = String(input);
       if (url.endsWith('/reportes')) {
         return crearOk
-          ? respuesta(true, 201, REPORTE)
+          ? respuesta(true, 201, {
+              id: 'rep-uno',
+              tipo: caso.tipo,
+              estado: caso.tipo,
+            })
           : respuesta(false, 500, { message: 'Error interno' });
       }
       if (url.includes('/fotos')) {
@@ -112,6 +140,8 @@ function agregarFoto(nombre = 'mascota.png'): void {
 beforeEach(() => {
   push.mockClear();
   replace.mockClear();
+  caso = CASOS[0];
+  mockPathname = '/reportar/perdida/fotos';
   window.sessionStorage.clear();
   crearOk = true;
   fotosOk = true;
@@ -122,97 +152,117 @@ beforeEach(() => {
   mockFetch();
 });
 
-describe('FotosCarga (paso 2 de 2 — HU1)', () => {
-  it('entrar directo al paso 2 sin datos del paso 1 redirige al paso 1', async () => {
-    render(<FotosCarga />);
-
-    expect(await screen.findByTestId('cargando-borrador')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(replace).toHaveBeenCalledWith('/reportar/perdida');
+describe.each(CASOS)(
+  'FotosCarga (paso 2 de 2 — $tipo)',
+  ({ tipo, ruta1, titulo }) => {
+    beforeEach(() => {
+      caso = { tipo, ruta1, titulo };
+      mockPathname = `${ruta1}/fotos`;
     });
-    // No hay nada que publicar: no se ofrece el botón ni se llama a la API.
-    expect(screen.queryByTestId('publicar-reporte')).not.toBeInTheDocument();
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
 
-  it('Volver regresa al paso 1 conservando los datos del borrador', async () => {
-    guardarBorradorEnMemoria();
-    render(<FotosCarga />);
+    it('muestra el título de su tipo', async () => {
+      guardarBorradorEnMemoria();
+      render(<FotosCarga />);
 
-    fireEvent.click(await screen.findByTestId('volver-paso-1'));
+      expect(
+        await screen.findByRole('heading', { name: titulo }),
+      ).toBeInTheDocument();
+    });
 
-    expect(push).toHaveBeenCalledWith('/reportar/perdida');
-    // No se crea nada y el borrador sigue intacto para el paso 1.
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(leerDraft()?.especie).toBe('perro');
-    expect(leerDraft()?.color).toBe('negro');
-  });
+    it('entrar directo al paso 2 sin datos del paso 1 redirige a SU paso 1', async () => {
+      render(<FotosCarga />);
 
-  it('caso 2: con reporteId no aparece "Volver" y "Omitir fotos" limpio el borrador', async () => {
-    guardarBorradorConReporte();
-    render(<FotosCarga />);
+      expect(await screen.findByTestId('cargando-borrador')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(replace).toHaveBeenCalledWith(ruta1);
+      });
+      // No hay nada que publicar: no se ofrece el botón ni se llama a la API.
+      expect(screen.queryByTestId('publicar-reporte')).not.toBeInTheDocument();
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
 
-    await screen.findByTestId('publicar-reporte');
-    // Sin "Volver" (editar un reporte es HU17): la salida es el detalle.
-    expect(screen.queryByTestId('volver-paso-1')).not.toBeInTheDocument();
-    expect(
-      screen.getByTestId('omitar-fotos'),
-    ).toHaveTextContent('Omitir fotos y ver mi reporte');
+    it('Volver regresa a SU paso 1 conservando los datos del borrador', async () => {
+      guardarBorradorEnMemoria();
+      render(<FotosCarga />);
 
-    fireEvent.click(screen.getByTestId('omitar-fotos'));
+      fireEvent.click(await screen.findByTestId('volver-paso-1'));
 
-    expect(push).toHaveBeenCalledWith('/reportes/rep-uno');
-    // El borrador se limpia y NUNCA se crea un segundo reporte.
-    expect(leerDraft()).toBeNull();
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
+      expect(push).toHaveBeenCalledWith(ruta1);
+      // No se crea nada y el borrador sigue intacto para el paso 1.
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(leerDraft()?.especie).toBe('perro');
+      expect(leerDraft()?.color).toBe('negro');
+    });
 
-  it('caso 2: publicar con reporteId existente no crea un segundo reporte', async () => {
-    guardarBorradorConReporte();
-    render(<FotosCarga />);
+    it('publicar sin fotos crea solo el reporte de SU tipo y redirige a su detalle', async () => {
+      guardarBorradorEnMemoria();
+      render(<FotosCarga />);
 
-    await screen.findByTestId('publicar-reporte');
-    agregarFoto();
-    fireEvent.click(screen.getByTestId('publicar-reporte'));
+      fireEvent.click(await screen.findByTestId('publicar-reporte'));
 
-    await waitFor(() => {
+      await waitFor(() => {
+        expect(push).toHaveBeenCalledWith('/reportes/rep-uno');
+      });
+
+      // Un único POST /reportes y ninguno a /fotos.
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+      expect(String(url)).toContain('/reportes');
+      expect((init as RequestInit).method).toBe('POST');
+      const body = JSON.parse(String((init as RequestInit).body)) as Record<
+        string,
+        unknown
+      >;
+      expect(body.tipo).toBe(tipo);
+      expect(body.especie).toBe('perro');
+      expect(body.latitud).toBe(10.42);
+
+      // Éxito: borrador limpio.
+      expect(leerDraft()).toBeNull();
+    });
+
+    it('caso 2: con reporteId no aparece "Volver" y "Omitir fotos" limpia el borrador', async () => {
+      guardarBorradorConReporte();
+      render(<FotosCarga />);
+
+      await screen.findByTestId('publicar-reporte');
+      // Sin "Volver" (editar un reporte es HU17): la salida es el detalle.
+      expect(screen.queryByTestId('volver-paso-1')).not.toBeInTheDocument();
+      expect(
+        screen.getByTestId('omitar-fotos'),
+      ).toHaveTextContent('Omitir fotos y ver mi reporte');
+
+      fireEvent.click(screen.getByTestId('omitar-fotos'));
+
       expect(push).toHaveBeenCalledWith('/reportes/rep-uno');
+      // El borrador se limpia y NUNCA se crea un segundo reporte.
+      expect(leerDraft()).toBeNull();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    // Solo la subida de la foto: ni un POST /reportes nuevo.
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toContain(
-      '/reportes/rep-uno/fotos',
-    );
-    expect(leerDraft()).toBeNull();
-  });
+    it('caso 2: publicar con reporteId existente no crea un segundo reporte', async () => {
+      guardarBorradorConReporte();
+      render(<FotosCarga />);
 
-  it('publicar sin fotos crea solo el reporte y redirige a su detalle', async () => {
-    guardarBorradorEnMemoria();
-    render(<FotosCarga />);
+      await screen.findByTestId('publicar-reporte');
+      agregarFoto();
+      fireEvent.click(screen.getByTestId('publicar-reporte'));
 
-    fireEvent.click(await screen.findByTestId('publicar-reporte'));
+      await waitFor(() => {
+        expect(push).toHaveBeenCalledWith('/reportes/rep-uno');
+      });
 
-    await waitFor(() => {
-      expect(push).toHaveBeenCalledWith('/reportes/rep-uno');
+      // Solo la subida de la foto: ni un POST /reportes nuevo.
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(String((global.fetch as jest.Mock).mock.calls[0][0])).toContain(
+        '/reportes/rep-uno/fotos',
+      );
+      expect(leerDraft()).toBeNull();
     });
+  },
+);
 
-    // Un único POST /reportes y ninguno a /fotos.
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
-    expect(String(url)).toContain('/reportes');
-    expect((init as RequestInit).method).toBe('POST');
-    const body = JSON.parse(String((init as RequestInit).body)) as Record<
-      string,
-      unknown
-    >;
-    expect(body.especie).toBe('perro');
-    expect(body.latitud).toBe(10.42);
-
-    // Éxito: borrador limpio.
-    expect(leerDraft()).toBeNull();
-  });
-
+describe('FotosCarga (HU1/HU2 — casos completos)', () => {
   it('publicar con fotos sube el reporte y luego cada fotografía', async () => {
     guardarBorradorEnMemoria();
     render(<FotosCarga />);
@@ -353,10 +403,25 @@ describe('FotosCarga (paso 2 de 2 — HU1)', () => {
     expect(boton).toBeDisabled();
     expect(boton).toHaveTextContent('Publicando...');
 
-    pendiente.liberar?.(respuesta(true, 201, REPORTE));
+    pendiente.liberar?.(respuesta(true, 201, {
+      id: 'rep-uno',
+      tipo: caso.tipo,
+      estado: caso.tipo,
+    }));
     await waitFor(() => {
       expect(push).toHaveBeenCalledWith('/reportes/rep-uno');
     });
+  });
+
+  it('un borrador de OTRO tipo te lleva a su paso 2 (no publica en la ruta equivocada)', async () => {
+    guardarBorradorEnMemoria('ENCONTRADA'); // pathname sigue en /perdida/fotos
+    render(<FotosCarga />);
+
+    await screen.findByTestId('publicar-reporte');
+    await waitFor(() => {
+      expect(replace).toHaveBeenCalledWith('/reportar/encontrada/fotos');
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('HU2: sin fotos muestra la ilustración propia y el consejo aprobado', async () => {

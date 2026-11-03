@@ -28,7 +28,8 @@ export default function ReportarPerdidaPage(): React.JSX.Element {
     if (iniciadoRef.current) return;
     iniciadoRef.current = true;
     const borrador = leerBorrador();
-    if (!borrador) return;
+    // Un borrador de otro tipo no corresponde a esta página.
+    if (!borrador || borrador.tipo !== TipoReporte.PERDIDA) return;
     if (borrador.reporteId) {
       router.replace('/reportar/perdida/fotos');
       return;

@@ -9,16 +9,10 @@ import type { PuntoMapa } from '@/components/reportes/MapaSelector';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  ApiError,
-  createReporte,
-  extractFieldErrors,
-} from '@/lib/api';
-import { guardarBorrador, leerBorrador } from '@/lib/borrador';
+import { guardarBorrador, leerBorrador, rutaPaso2 } from '@/lib/borrador';
 
 interface ReporteFormProps {
   tipo: TipoReporte;
-  submitLabel?: string;
   /** HU9: punto marcado en el mapa; se envía como latitud/longitud. */
   punto?: PuntoMapa | null;
 }
@@ -60,7 +54,6 @@ function clientValidate(
 
 export function ReporteForm({
   tipo,
-  submitLabel,
   punto,
 }: ReporteFormProps): React.JSX.Element {
   const router = useRouter();
@@ -68,19 +61,15 @@ export function ReporteForm({
   const [errors, setErrors] = React.useState<
     Partial<Record<keyof FormState, string>>
   >({});
-  const [submitting, setSubmitting] = React.useState(false);
-  const [serverError, setServerError] = React.useState<string | null>(null);
 
   const esPerdida = tipo === TipoReporte.PERDIDA;
-  const boton =
-    submitLabel ?? (esPerdida ? 'Siguiente paso' : 'Publicar reporte');
+  const boton = 'Siguiente paso';
 
-  // HU1: al volver del paso 2 (o tras una recarga) se recuperan los datos
-  // guardados en el borrador. Solo aplica al flujo en 2 pasos (PERDIDA).
+  // HU1/HU3: al volver del paso 2 (o tras una recarga) se recuperan los datos
+  // guardados en el borrador. Solo si el borrador es de ESTE tipo de reporte.
   React.useEffect(() => {
-    if (!esPerdida) return;
     const borrador = leerBorrador();
-    if (!borrador) return;
+    if (!borrador || borrador.tipo !== tipo) return;
     setForm({
       especie: borrador.especie,
       raza: borrador.raza,
@@ -88,7 +77,7 @@ export function ReporteForm({
       caracteristicasDistintivas: borrador.caracteristicasDistintivas,
       ubicacion: borrador.ubicacion,
     });
-  }, [esPerdida]);
+  }, [tipo]);
 
   function updateField(field: keyof FormState, value: string): void {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -110,61 +99,27 @@ export function ReporteForm({
     });
   }
 
-  async function handleSubmit(
-    e: React.FormEvent<HTMLFormElement>,
-  ): Promise<void> {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
     e.preventDefault();
-    setServerError(null);
 
     const clientErrors = clientValidate(form, tipo, punto ?? null);
     setErrors(clientErrors);
+    if (Object.keys(clientErrors).length > 0) return;
 
-    // HU1 (paso 1 de 2): aquí NO se publica. Si hay errores de validación se
-    // queda en el paso 1; si todo está bien se guarda el borrador en el
-    // navegador y se navega al paso 2, que es quien crea el reporte.
-    if (esPerdida) {
-      if (Object.keys(clientErrors).length > 0) return;
-      guardarBorrador({
-        tipo,
-        especie: form.especie.trim(),
-        raza: form.raza.trim(),
-        color: form.color.trim(),
-        caracteristicasDistintivas: form.caracteristicasDistintivas.trim(),
-        ubicacion: form.ubicacion.trim(),
-        latitud: punto?.lat,
-        longitud: punto?.lng,
-      });
-      router.push('/reportar/perdida/fotos');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      // Solo llega aquí el flujo ENCONTRADA: el PERDIDA ya retornó arriba.
-      await createReporte({
-        tipo,
-        especie: form.especie.trim(),
-        raza: form.raza.trim() || undefined,
-        color: form.color.trim(),
-        caracteristicasDistintivas: form.caracteristicasDistintivas.trim(),
-        ubicacion: form.ubicacion.trim() || undefined,
-        latitud: punto?.lat,
-        longitud: punto?.lng,
-      });
-      router.push('/');
-    } catch (err) {
-      if (err instanceof ApiError) {
-        const fieldErrors = extractFieldErrors(err);
-        if (Object.keys(fieldErrors).length > 0) {
-          setErrors(fieldErrors as Partial<Record<keyof FormState, string>>);
-        } else {
-          setServerError('No se pudo publicar el reporte. Intenta de nuevo.');
-        }
-      } else {
-        setServerError('Error de conexión con el servidor.');
-      }
-      setSubmitting(false);
-    }
+    // HU1/HU3 (paso 1 de 2): aquí NO se publica. Se guarda el borrador en el
+    // navegador y se navega al paso 2, que es quien crea el reporte y sube
+    // las fotos opcionales.
+    guardarBorrador({
+      tipo,
+      especie: form.especie.trim(),
+      raza: form.raza.trim(),
+      color: form.color.trim(),
+      caracteristicasDistintivas: form.caracteristicasDistintivas.trim(),
+      ubicacion: form.ubicacion.trim(),
+      latitud: punto?.lat,
+      longitud: punto?.lng,
+    });
+    router.push(rutaPaso2(tipo));
   }
 
   return (
@@ -246,14 +201,8 @@ export function ReporteForm({
         />
       </FormField>
 
-      {serverError && (
-        <p role="alert" className="text-sm font-medium text-destructive">
-          {serverError}
-        </p>
-      )}
-
-      <Button type="submit" disabled={submitting} className="mt-1 w-full">
-        {submitting ? 'Publicando...' : boton}
+      <Button type="submit" className="mt-1 w-full">
+        {boton}
       </Button>
     </form>
   );

@@ -181,7 +181,7 @@ describe('ReporteDetalle (HU13)', () => {
     );
   });
 
-  it('AC1: en un reporte de hallazgo muestra "Mascota encontrada"', async () => {
+  it('AC1: en un reporte de hallazgo muestra "Mascota encontrada" y su fotografía', async () => {
     getReporteMock.mockResolvedValue({
       ...reporte,
       tipo: TipoReporte.ENCONTRADA,
@@ -192,6 +192,11 @@ describe('ReporteDetalle (HU13)', () => {
 
     expect(await screen.findByTestId('reporte-tipo')).toHaveTextContent(
       'Mascota encontrada',
+    );
+    // La foto del reporte de hallazgo también se muestra en el detalle.
+    expect(screen.getByRole('img')).toHaveAttribute(
+      'src',
+      '/files/perro.jpg',
     );
   });
 

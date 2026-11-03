@@ -39,14 +39,14 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
     ).toBeInTheDocument();
   });
 
-  it('HU3: en tipo ENCONTRADA muestra Ubicación y el botón Publicar reporte', () => {
+  it('HU3: en tipo ENCONTRADA muestra Ubicación y el botón Siguiente paso', () => {
     render(<ReporteForm tipo={TipoReporte.ENCONTRADA} />);
     expect(screen.getByLabelText(/ubicación/i)).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: /publicar reporte/i }),
+      screen.getByRole('button', { name: /siguiente paso/i }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /siguiente paso/i }),
+      screen.queryByRole('button', { name: /publicar reporte/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -132,12 +132,6 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
     });
   }
 
-  function ultimoBodyEnviado(): Record<string, unknown> {
-    const calls = (global.fetch as jest.Mock).mock.calls;
-    const init = calls[calls.length - 1][1] as RequestInit;
-    return JSON.parse(String(init.body)) as Record<string, unknown>;
-  }
-
   describe('HU9 — punto en el mapa', () => {
     it('AC2: con punto marcado guarda latitud y longitud en el borrador', () => {
       render(
@@ -166,7 +160,7 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('AC1: en ENCONTRADA el punto en el mapa sustituye a la dirección escrita', async () => {
+    it('AC1: en ENCONTRADA el punto en el mapa sustituye a la dirección escrita', () => {
       render(
         <ReporteForm
           tipo={TipoReporte.ENCONTRADA}
@@ -175,36 +169,47 @@ describe('ReporteForm (HU1/HU3 — rediseño Figma)', () => {
       );
       completarCamposBasicos();
       // Sin escribir la dirección: el punto debe bastar.
-      fireEvent.click(screen.getByRole('button', { name: /publicar reporte/i }));
+      fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
 
       expect(
         screen.queryByText(/indica la ubicación/i),
       ).not.toBeInTheDocument();
-      expect(global.fetch).toHaveBeenCalled();
+      // Paso 1: guarda borrador con coordenadas y avanza; nunca publica.
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(push).toHaveBeenCalledWith('/reportar/encontrada/fotos');
+      const borrador = leerBorrador();
+      expect(borrador?.tipo).toBe('ENCONTRADA');
+      expect(borrador?.latitud).toBe(10.4);
+      expect(borrador?.longitud).toBe(-66.85);
     });
 
     it('AC1: en ENCONTRADA sin punto y sin dirección aparece el error', async () => {
       render(<ReporteForm tipo={TipoReporte.ENCONTRADA} />);
       completarCamposBasicos();
-      fireEvent.click(screen.getByRole('button', { name: /publicar reporte/i }));
+      fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
 
       expect(
         await screen.findByText(/indica la ubicación/i),
       ).toBeInTheDocument();
+      // Con error no se avanza ni se guarda nada.
+      expect(push).not.toHaveBeenCalled();
+      expect(leerBorrador()).toBeNull();
     });
 
-    it('AC1: la dirección escrita sigue siendo válida sin punto en el mapa', async () => {
+    it('AC1: la dirección escrita sigue siendo válida sin punto en el mapa', () => {
       render(<ReporteForm tipo={TipoReporte.ENCONTRADA} />);
       completarCamposBasicos();
       fireEvent.change(screen.getByLabelText(/^ubicación/i), {
         target: { value: 'Av. Principal con Calle 5' },
       });
-      fireEvent.click(screen.getByRole('button', { name: /publicar reporte/i }));
+      fireEvent.click(screen.getByRole('button', { name: /siguiente paso/i }));
 
-      await screen.findByText('Publicando...');
-      const body = ultimoBodyEnviado();
-      expect(body.ubicacion).toBe('Av. Principal con Calle 5');
-      expect(body.latitud).toBeUndefined();
+      expect(push).toHaveBeenCalledWith('/reportar/encontrada/fotos');
+      expect(global.fetch).not.toHaveBeenCalled();
+      const borrador = leerBorrador();
+      expect(borrador?.ubicacion).toBe('Av. Principal con Calle 5');
+      expect(borrador?.latitud).toBeUndefined();
+      expect(borrador?.longitud).toBeUndefined();
     });
   });
 });

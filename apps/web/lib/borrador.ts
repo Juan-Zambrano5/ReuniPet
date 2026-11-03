@@ -56,3 +56,17 @@ export function limpiarBorrador(): void {
   if (typeof window === 'undefined') return;
   window.sessionStorage.removeItem(STORAGE_KEY);
 }
+
+/** Ruta del paso 2 (fotos) según el tipo de reporte. */
+export function rutaPaso2(tipo: TipoReporte): string {
+  return tipo === TipoReporte.ENCONTRADA
+    ? '/reportar/encontrada/fotos'
+    : '/reportar/perdida/fotos';
+}
+
+/** Ruta del paso 1 (datos) según el tipo de reporte. */
+export function rutaPaso1(tipo: TipoReporte): string {
+  return tipo === TipoReporte.ENCONTRADA
+    ? '/reportar/encontrada'
+    : '/reportar/perdida';
+}

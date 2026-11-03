@@ -18,7 +18,7 @@ const ACCIONES = [
   {
     href: '/reportar/encontrada',
     titulo: 'Reportar mascota encontrada',
-    descripcion: 'Avisa al propietario de un hallazgo.',
+    descripcion: 'Publica el hallazgo en 2 pasos y avisa a su propietario.',
     icono: PawPrint,
   },
   {

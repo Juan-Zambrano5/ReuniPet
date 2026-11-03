@@ -139,4 +139,38 @@ describe('Comparador (HU10 — información de contacto)', () => {
     expect(screen.getByText('Tu Reporte')).toBeInTheDocument();
     expect(screen.getByText('Reporte Encontrado')).toBeInTheDocument();
   });
+
+  it('HU3: muestra la fotografía del reporte de hallazgo', async () => {
+    getReporteMock
+      .mockReset()
+      .mockResolvedValueOnce(reportePerdida)
+      .mockResolvedValueOnce({
+        ...reporteEncontrada,
+        fotos: [
+          {
+            id: 'fot-enc',
+            reporteId: 'rep-hallazgo',
+            url: '/uploads/fot-enc.png',
+            orden: 0,
+            createdAt: '2026-09-28T10:00:00.000Z',
+          },
+        ],
+      });
+
+    render(<ComparadorPage />);
+
+    // La foto del hallazgo aparece en la tarjeta "Reporte Encontrado".
+    const foto = await screen.findByAltText(
+      'Foto de la mascota encontrada',
+    );
+    expect(foto).toHaveAttribute('src', '/uploads/fot-enc.png');
+  });
+
+  it('HU3: sin fotos en el hallazgo muestra el mensaje de reemplazo', async () => {
+    render(<ComparadorPage />);
+
+    // Ambos reportes sin fotos: mensaje en las dos tarjetas, nunca un
+    // espacio roto.
+    expect(await screen.findAllByText('Sin fotografía')).toHaveLength(2);
+  });
 });
