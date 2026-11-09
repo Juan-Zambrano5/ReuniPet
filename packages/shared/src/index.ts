@@ -15,6 +15,22 @@ export enum EstadoCoincidencia {
   DESCARTADA = 'DESCARTADA',
 }
 
+// HU17: PATCH /reportes/:id. Solo se envían los campos que cambian; la
+// ubicación se edita con PATCH /reportes/:id/ubicacion.
+export interface UpdateReporteInput {
+  especie?: string;
+  raza?: string | null;
+  color?: string;
+  caracteristicasDistintivas?: string;
+}
+
+// HU9: PATCH /reportes/:id/ubicacion.
+export interface UpdateUbicacionInput {
+  latitud: number;
+  longitud: number;
+  ubicacion?: string;
+}
+
 export interface CreateReporteInput {
   tipo: TipoReporte;
   especie: string;

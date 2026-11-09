@@ -26,6 +26,7 @@ import { MatchingService, normalizar } from '../matching/matching.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReporteDto } from './dto/create-reporte.dto';
 import { ListReportesDto } from './dto/list-reportes.dto';
+import { UpdateReporteDto } from './dto/update-reporte.dto';
 import { UpdateUbicacionDto } from './dto/update-ubicacion.dto';
 
 @Injectable()
@@ -83,6 +84,69 @@ export class ReportesService {
       createdAt: f.createdAt.toISOString(),
     }));
     return response;
+  }
+
+  /**
+   * HU17: edita especie, raza, color y características (solo el propietario).
+   * Si cambia especie, raza o color —comparados normalizados, igual que el
+   * matching— se borran las coincidencias PENDIENTE del reporte y se vuelve
+   * a comparar. Las VISTA y DESCARTADA se conservan, y registrarCoincidencia
+   * no las duplica. Cambiar solo las características no recalcula: el
+   * matching no usa ese campo.
+   */
+  async update(
+    id: string,
+    dto: UpdateReporteDto,
+    user: Usuario,
+  ): Promise<ReporteResponse> {
+    const reporte = await this.prisma.reporte.findUnique({ where: { id } });
+    if (!reporte) {
+      throw new NotFoundException('Reporte no encontrado');
+    }
+    if (reporte.propietarioId !== user.id) {
+      throw new ForbiddenException(
+        'Solo el propietario puede editar este reporte',
+      );
+    }
+
+    const data: Prisma.ReporteUpdateInput = {};
+    if (dto.especie !== undefined) data.especie = dto.especie;
+    if (dto.raza !== undefined) data.raza = dto.raza ? dto.raza : null;
+    if (dto.color !== undefined) data.color = dto.color;
+    if (dto.caracteristicasDistintivas !== undefined) {
+      data.caracteristicasDistintivas = dto.caracteristicasDistintivas;
+    }
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Envía al menos un campo para actualizar');
+    }
+
+    const cambio = (antes: string | null, despues: unknown): boolean =>
+      despues !== undefined &&
+      normalizar(antes ?? '') !== normalizar((despues as string | null) ?? '');
+    const recalcular =
+      cambio(reporte.especie, data.especie) ||
+      cambio(reporte.raza, data.raza) ||
+      cambio(reporte.color, data.color);
+
+    const [actualizado] = await this.prisma.$transaction([
+      this.prisma.reporte.update({ where: { id }, data }),
+      ...(recalcular
+        ? [
+            this.prisma.coincidencia.deleteMany({
+              where: {
+                estado: EstadoCoincidencia.PENDIENTE,
+                OR: [{ reportePerdidaId: id }, { reporteEncontradaId: id }],
+              },
+            }),
+          ]
+        : []),
+    ]);
+
+    if (recalcular) {
+      await this.matching.compararReporte(id);
+    }
+
+    return this.toResponse(actualizado, user.id);
   }
 
   /** HU9: actualiza el punto (y opcionalmente el texto) de un reporte. */
@@ -156,6 +220,12 @@ export class ReportesService {
       where: { id },
       data: { estado: nuevoEstado },
     });
+
+    // Reabrir: mientras estuvo RECUPERADA el matching lo ignoró (y una edición
+    // pudo borrar sus PENDIENTE). Las parejas existentes no se duplican.
+    if (reporte.estado === EstadoReporte.RECUPERADA) {
+      await this.matching.compararReporte(id);
+    }
 
     return this.toResponse(actualizado, user.id);
   }

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { Pencil } from 'lucide-react';
 import {
   EstadoReporte,
   ReporteResponse,
@@ -282,7 +283,20 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
           className="mt-6 rounded-card border border-border bg-card p-4 shadow-card"
           data-testid="panel-estado"
         >
-          <p className="text-sm font-semibold text-text">Estado de tu reporte</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-text">
+              Estado de tu reporte
+            </p>
+            {/* HU17: editar la información (solo el propietario ve este panel). */}
+            <Link
+              href={`/reportes/${reporte.id}/editar`}
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+              data-testid="enlace-editar"
+            >
+              <Pencil className="h-4 w-4" aria-hidden />
+              Editar información
+            </Link>
+          </div>
 
           {reporte.estado !== EstadoReporte.RECUPERADA ? (
             confirmando ? (

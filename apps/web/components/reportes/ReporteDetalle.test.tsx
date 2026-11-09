@@ -420,3 +420,32 @@ describe('ReporteDetalle (HU14)', () => {
     expect(screen.getByTestId('status-badge')).toHaveTextContent('RECUPERADO');
   });
 });
+
+describe('ReporteDetalle (HU17)', () => {
+  beforeEach(() => {
+    getReporteMock.mockReset();
+  });
+
+  it('el propietario ve el enlace "Editar información" a /reportes/[id]/editar', async () => {
+    getReporteMock.mockResolvedValue({ ...reporte, esPropietario: true });
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByTestId('enlace-editar')).toHaveAttribute(
+      'href',
+      '/reportes/rep-1/editar',
+    );
+  });
+
+  it('un tercero o un anónimo no ve el enlace de edición', async () => {
+    getReporteMock.mockResolvedValue(reporte);
+
+    render(<ReporteDetalle id="rep-1" />);
+
+    expect(await screen.findByText('Detalle del reporte')).toBeInTheDocument();
+    expect(screen.queryByTestId('enlace-editar')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /editar/i }),
+    ).not.toBeInTheDocument();
+  });
+});

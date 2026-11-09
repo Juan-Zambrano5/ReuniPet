@@ -1,9 +1,16 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { TipoReporte } from '@reunipet/shared';
 import { ReportesService } from './reportes.service';
 import { CreateReporteDto } from './dto/create-reporte.dto';
 import { UpdateEstadoDto } from './dto/update-estado.dto';
+import { UpdateReporteDto } from './dto/update-reporte.dto';
 import { MatchingService } from '../matching/matching.service';
 import { EstadoReporte, Usuario } from '@prisma/client';
 
@@ -27,6 +34,8 @@ describe('ReportesService', () => {
       update: jest.Mock;
     };
     contactoSolicitud: { create: jest.Mock };
+    coincidencia: { deleteMany: jest.Mock };
+    $transaction: jest.Mock;
   };
   let matchingMock: { compararReporte: jest.Mock };
 
@@ -42,6 +51,8 @@ describe('ReportesService', () => {
       contactoSolicitud: {
         create: jest.fn(),
       },
+      coincidencia: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      $transaction: jest.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     };
     matchingMock = { compararReporte: jest.fn().mockResolvedValue(undefined) };
     service = new ReportesService(
@@ -838,6 +849,30 @@ describe('ReportesService', () => {
       expect(reabierta.estado).toBe('ENCONTRADA');
     });
 
+    it('HU17: reabrir (RECUPERADA → activo) vuelve a ejecutar la comparación', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue({
+        ...reportePerdida,
+        estado: 'RECUPERADA',
+      });
+      prismaMock.reporte.update.mockResolvedValue(reportePerdida);
+
+      await service.updateEstado('rep-e1', EstadoReporte.PERDIDA, user);
+
+      expect(matchingMock.compararReporte).toHaveBeenCalledWith('rep-e1');
+    });
+
+    it('HU17: cerrar (activo → RECUPERADA) o repetir el mismo estado no compara', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(reportePerdida);
+      prismaMock.reporte.update.mockResolvedValue({
+        ...reportePerdida,
+        estado: 'RECUPERADA',
+      });
+      await service.updateEstado('rep-e1', EstadoReporte.RECUPERADA, user);
+      await service.updateEstado('rep-e1', EstadoReporte.PERDIDA, user);
+
+      expect(matchingMock.compararReporte).not.toHaveBeenCalled();
+    });
+
     it('HU14: "ENCONTRADA" no es válido para un reporte tipo PERDIDA (400)', async () => {
       prismaMock.reporte.findUnique.mockResolvedValue(reportePerdida);
 
@@ -923,6 +958,146 @@ describe('ReportesService', () => {
 
       expect(result.telefono).toBeNull();
       expect(result.email).toBe('maria@test.dev');
+    });
+  });
+
+  describe('HU17 — editar la información del reporte', () => {
+    const propio = {
+      id: 'rep-1',
+      tipo: 'PERDIDA',
+      especie: 'Perro',
+      raza: 'Labrador',
+      color: 'negro',
+      caracteristicasDistintivas: 'collar rojo',
+      ubicacion: null,
+      latitud: null,
+      longitud: null,
+      estado: 'PERDIDA',
+      propietarioId: user.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    beforeEach(() => {
+      prismaMock.reporte.findUnique.mockResolvedValue(propio);
+      prismaMock.reporte.update.mockImplementation(
+        ({ data }: { data: Record<string, unknown> }) =>
+          Promise.resolve({ ...propio, ...data }),
+      );
+    });
+
+    it('cambiar la especie borra las PENDIENTE y vuelve a comparar', async () => {
+      const res = await service.update('rep-1', { especie: 'Gato' }, user);
+
+      expect(prismaMock.reporte.update).toHaveBeenCalledWith({
+        where: { id: 'rep-1' },
+        data: { especie: 'Gato' },
+      });
+      expect(prismaMock.coincidencia.deleteMany).toHaveBeenCalledWith({
+        where: {
+          estado: 'PENDIENTE',
+          OR: [{ reportePerdidaId: 'rep-1' }, { reporteEncontradaId: 'rep-1' }],
+        },
+      });
+      expect(matchingMock.compararReporte).toHaveBeenCalledWith('rep-1');
+      expect(res.especie).toBe('Gato');
+      expect(res).not.toHaveProperty('propietarioId');
+    });
+
+    it('cambiar raza o color también recalcula; borrar la raza la deja en null', async () => {
+      await service.update('rep-1', { raza: '' }, user);
+      expect(prismaMock.reporte.update).toHaveBeenLastCalledWith({
+        where: { id: 'rep-1' },
+        data: { raza: null },
+      });
+      expect(matchingMock.compararReporte).toHaveBeenCalledTimes(1);
+
+      await service.update('rep-1', { color: 'blanco' }, user);
+      expect(matchingMock.compararReporte).toHaveBeenCalledTimes(2);
+    });
+
+    it('cambiar solo las características no recalcula', async () => {
+      await service.update(
+        'rep-1',
+        { caracteristicasDistintivas: 'sin collar' },
+        user,
+      );
+      expect(prismaMock.reporte.update).toHaveBeenCalled();
+      expect(prismaMock.coincidencia.deleteMany).not.toHaveBeenCalled();
+      expect(matchingMock.compararReporte).not.toHaveBeenCalled();
+    });
+
+    it('un cambio solo de mayúsculas, acentos o espacios no recalcula', async () => {
+      await service.update(
+        'rep-1',
+        { especie: ' PERRO ', raza: 'labrádor', color: 'Negro' },
+        user,
+      );
+      expect(prismaMock.coincidencia.deleteMany).not.toHaveBeenCalled();
+      expect(matchingMock.compararReporte).not.toHaveBeenCalled();
+    });
+
+    it('otro usuario → 403 y el reporte no cambia', async () => {
+      await expect(
+        service.update('rep-1', { especie: 'Gato' }, { ...user, id: 'otro' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prismaMock.reporte.update).not.toHaveBeenCalled();
+      expect(matchingMock.compararReporte).not.toHaveBeenCalled();
+    });
+
+    it('reporte inexistente → 404', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(null);
+      await expect(
+        service.update('no-existe', { especie: 'Gato' }, user),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('un body vacío → 400', async () => {
+      await expect(service.update('rep-1', {}, user)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prismaMock.reporte.update).not.toHaveBeenCalled();
+    });
+
+    describe('UpdateReporteDto (ValidationPipe global)', () => {
+      const pipe = new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      });
+      const validar = (body: Record<string, unknown>): Promise<unknown> =>
+        pipe.transform(body, { type: 'body', metatype: UpdateReporteDto });
+
+      it.each([
+        ['tipo', { tipo: 'ENCONTRADA' }],
+        ['estado', { estado: 'RECUPERADA' }],
+        ['fotos', { fotos: [] }],
+        ['propietarioId', { propietarioId: 'otro' }],
+      ])('enviar %s → 400', async (_campo, body) => {
+        await expect(validar({ color: 'gris', ...body })).rejects.toThrow(
+          BadRequestException,
+        );
+      });
+
+      it('acepta los cuatro campos editables y recorta espacios', async () => {
+        await expect(
+          validar({
+            especie: ' Gato ',
+            raza: null,
+            color: 'gris',
+            caracteristicasDistintivas: 'mancha',
+          }),
+        ).resolves.toMatchObject({ especie: 'Gato', raza: null, color: 'gris' });
+      });
+
+      it('especie o color vacíos → 400', async () => {
+        await expect(validar({ especie: '   ' })).rejects.toThrow(
+          BadRequestException,
+        );
+        await expect(validar({ color: '' })).rejects.toThrow(
+          BadRequestException,
+        );
+      });
     });
   });
 });

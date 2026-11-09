@@ -10,6 +10,8 @@ import {
   RegisterInput,
   ReporteResponse,
   TipoReporte,
+  UpdateReporteInput,
+  UpdateUbicacionInput,
   UsuarioPublicoResponse,
 } from '@reunipet/shared';
 import { cerrarSesion, leerToken, sesionNoAutorizada } from './sesion';
@@ -147,6 +149,39 @@ export async function cambiarEstadoReporte(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ estado }),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.json().catch(() => ({})));
+  }
+  return (await res.json()) as ReporteResponse;
+}
+
+// HU17: editar especie, raza, color y características (solo el propietario).
+// Se envían solo los campos que cambiaron.
+export async function actualizarReporte(
+  id: string,
+  cambios: UpdateReporteInput,
+): Promise<ReporteResponse> {
+  const res = await apiFetch(`/reportes/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cambios),
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.json().catch(() => ({})));
+  }
+  return (await res.json()) as ReporteResponse;
+}
+
+// HU9/HU17: punto en el mapa (y texto de referencia) del reporte.
+export async function actualizarUbicacion(
+  id: string,
+  ubicacion: UpdateUbicacionInput,
+): Promise<ReporteResponse> {
+  const res = await apiFetch(`/reportes/${id}/ubicacion`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ubicacion),
   });
   if (!res.ok) {
     throw new ApiError(res.status, await res.json().catch(() => ({})));

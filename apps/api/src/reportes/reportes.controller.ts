@@ -27,6 +27,7 @@ import { MulterExceptionFilter } from '../common/multer-exception.filter';
 import { CreateReporteDto } from './dto/create-reporte.dto';
 import { ListReportesDto } from './dto/list-reportes.dto';
 import { UpdateEstadoDto } from './dto/update-estado.dto';
+import { UpdateReporteDto } from './dto/update-reporte.dto';
 import { UpdateUbicacionDto } from './dto/update-ubicacion.dto';
 import { FotosService } from './fotos.service';
 import { ReportesService } from './reportes.service';
@@ -105,6 +106,17 @@ export class ReportesController {
       throw new NotFoundException('Reporte no encontrado');
     }
     return reporte;
+  }
+
+  // HU17: editar especie, raza, color y características (solo su propietario).
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateReporteDto,
+    @Req() req: Request,
+  ): Promise<ReporteResponse> {
+    const user = await this.currentUser.getUser(req);
+    return this.reportesService.update(id, dto, user);
   }
 
   // HU9: actualizar el punto del reporte (solo su propietario).
