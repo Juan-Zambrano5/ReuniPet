@@ -82,13 +82,18 @@ export class MatchingService {
       where: { id: reporteId },
     });
     if (!reporte) return;
-    if (reporte.estado === 'RECUPERADA') return;
+    // HU11/HU18: ni los RECUPERADA ni los ocultos por moderación se comparan.
+    if (reporte.estado === 'RECUPERADA' || reporte.moderado) return;
 
     const esPerdida = reporte.tipo === 'PERDIDA';
     const tipoOpuesto = esPerdida ? 'ENCONTRADA' : 'PERDIDA';
 
     const candidatos = await this.prisma.reporte.findMany({
-      where: { tipo: tipoOpuesto, estado: { not: 'RECUPERADA' } },
+      where: {
+        tipo: tipoOpuesto,
+        estado: { not: 'RECUPERADA' },
+        moderado: false,
+      },
     });
 
     for (const candidato of candidatos) {

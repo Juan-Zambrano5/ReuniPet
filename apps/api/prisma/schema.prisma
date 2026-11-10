@@ -14,9 +14,16 @@ model Usuario {
   telefono  String?
   // HU12 (Sprint 3): hash de la contraseña (scrypt). Nulo en el usuario demo.
   passwordHash String?
+  // HU18: el primer ADMIN sale del seed (ADMIN_EMAIL/ADMIN_PASSWORD).
+  rol       RolUsuario @default(USUARIO)
   createdAt DateTime  @default(now())
   reportes  Reporte[]
   contactosSolicitados ContactoSolicitud[] @relation("ContactoSolicitante")
+}
+
+enum RolUsuario {
+  USUARIO
+  ADMIN
 }
 
 enum TipoReporte {
@@ -41,6 +48,9 @@ model Reporte {
   latitud                    Float?
   longitud                   Float?
   estado                     EstadoReporte
+  // HU18: oculto por un administrador (no se borra; se puede restaurar).
+  moderado                   Boolean       @default(false)
+  motivoModeracion           String?
   propietarioId              String
   propietario                Usuario       @relation(fields: [propietarioId], references: [id])
   fotos                      Fotografia[]

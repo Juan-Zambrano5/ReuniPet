@@ -24,6 +24,8 @@ const DETALLE_ANONIMO = {
   longitud: -66.99,
   estado: 'PERDIDA',
   esPropietario: false,
+  moderado: false,
+  motivoModeracion: null,
   createdAt: '2026-09-28T10:00:00.000Z',
   updatedAt: '2026-09-28T10:00:00.000Z',
   fotos: [],

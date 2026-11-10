@@ -8,6 +8,7 @@ const user: Usuario = {
   email: 'ana@test.dev',
   telefono: null,
   passwordHash: null,
+  rol: 'USUARIO',
   createdAt: new Date(),
 };
 
@@ -63,7 +64,7 @@ describe('ReportesService.listMine (HU15)', () => {
     // AC2: cuenta como /alertas — sin descartadas ni con la otra parte RECUPERADA.
     expect(args.include._count.select.coincidenciasComoPerdida.where).toEqual({
       estado: { in: ['PENDIENTE', 'VISTA'] },
-      reporteEncontrada: { estado: { not: 'RECUPERADA' } },
+      reporteEncontrada: { estado: { not: 'RECUPERADA' }, moderado: false },
     });
   });
 

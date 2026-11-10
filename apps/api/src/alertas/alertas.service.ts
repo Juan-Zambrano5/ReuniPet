@@ -18,8 +18,13 @@ export class AlertasService {
         // HU11: se excluyen las coincidencias que involucran reportes
         // RECUPERADA. Se filtra AL CONSULTAR (sin tocar datos), para que
         // reabrir un reporte devuelva sus alertas de forma reversible.
-        reportePerdida: { propietarioId: userId, estado: { not: 'RECUPERADA' } },
-        reporteEncontrada: { estado: { not: 'RECUPERADA' } },
+        // HU18: lo mismo con los reportes ocultos por moderación.
+        reportePerdida: {
+          propietarioId: userId,
+          estado: { not: 'RECUPERADA' },
+          moderado: false,
+        },
+        reporteEncontrada: { estado: { not: 'RECUPERADA' }, moderado: false },
       },
       include: {
         reportePerdida: true,

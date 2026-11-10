@@ -120,7 +120,15 @@ export function MisReportes(): React.JSX.Element {
                     {r.raza ? ` (${r.raza})` : ''}
                   </p>
                 </div>
-                <StatusBadge variant={badge.variante}>{badge.texto}</StatusBadge>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <StatusBadge variant={badge.variante}>{badge.texto}</StatusBadge>
+                  {/* HU18 AC1: el dueño sigue viendo su reporte oculto. */}
+                  {r.moderado && (
+                    <StatusBadge variant="neutral">
+                      Oculto por moderación
+                    </StatusBadge>
+                  )}
+                </div>
               </div>
               <p className="mt-2 text-xs text-muted">
                 <time dateTime={r.createdAt}>

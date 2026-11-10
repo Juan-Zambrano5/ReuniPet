@@ -28,6 +28,8 @@ function item(over: Partial<MiReporteItem>): MiReporteItem {
     latitud: null,
     longitud: null,
     esPropietario: true,
+    moderado: false,
+    motivoModeracion: null,
     fotoPrincipal: null,
     createdAt: '2026-11-01T10:00:00.000Z',
     updatedAt: '2026-11-01T10:00:00.000Z',
@@ -123,5 +125,23 @@ describe('MisReportes (HU15)', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'No se pudieron cargar tus reportes',
     );
+  });
+});
+
+describe('MisReportes (HU18)', () => {
+  it('AC1: el dueño ve su reporte oculto con la etiqueta "Oculto por moderación"', async () => {
+    getMisReportesMock.mockResolvedValue([
+      item({ id: 'oculto', moderado: true, motivoModeracion: 'Duplicado' }),
+      item({ id: 'visible' }),
+    ]);
+    render(<MisReportes />);
+
+    const oculto = await screen.findByTestId('mi-reporte-oculto');
+    expect(within(oculto).getByText('Oculto por moderación')).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId('mi-reporte-visible')).queryByText(
+        'Oculto por moderación',
+      ),
+    ).not.toBeInTheDocument();
   });
 });

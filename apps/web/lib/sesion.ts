@@ -11,6 +11,8 @@ import type { LoginResponse } from '@reunipet/shared';
  */
 export const SESION_TOKEN_KEY = 'reunipet:token';
 export const SESION_NOMBRE_KEY = 'reunipet:nombre';
+// HU18: solo decide si se muestra "Administración"; la API verifica el rol.
+export const SESION_ROL_KEY = 'reunipet:rol';
 export const SESION_EVENTO = 'reunipet:sesion';
 
 // Claves de la sesión simulada de los Sprints 1-3 (X-User-Id). Se borran al
@@ -48,11 +50,17 @@ export function leerNombreSesion(): string | null {
   return s.getItem(SESION_NOMBRE_KEY);
 }
 
+export function esAdminSesion(): boolean {
+  const s = almacen();
+  return Boolean(s?.getItem(SESION_TOKEN_KEY)) && s?.getItem(SESION_ROL_KEY) === 'ADMIN';
+}
+
 export function guardarSesion(sesion: LoginResponse): void {
   const s = almacen();
   if (!s) return;
   s.setItem(SESION_TOKEN_KEY, sesion.token);
   s.setItem(SESION_NOMBRE_KEY, sesion.usuario.nombre);
+  s.setItem(SESION_ROL_KEY, sesion.usuario.rol);
   avisar();
 }
 
@@ -61,6 +69,7 @@ export function cerrarSesion(): void {
   if (!s) return;
   s.removeItem(SESION_TOKEN_KEY);
   s.removeItem(SESION_NOMBRE_KEY);
+  s.removeItem(SESION_ROL_KEY);
   avisar();
 }
 

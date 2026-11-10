@@ -13,6 +13,7 @@ import {
   UseFilters,
   UseInterceptors,
 } from '@nestjs/common';
+import { RolUsuario } from '@prisma/client';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Request } from 'express';
@@ -101,7 +102,11 @@ export class ReportesController {
     // HU9 AC3: las coords se sirven según quién consulta (dueño o tercero).
     // HU16: ruta pública; sin sesión esPropietario es false.
     const user = await this.currentUser.getOptionalUser(req);
-    const reporte = await this.reportesService.findById(id, user?.id ?? null);
+    const reporte = await this.reportesService.findById(
+      id,
+      user?.id ?? null,
+      user?.rol === RolUsuario.ADMIN,
+    );
     if (!reporte) {
       throw new NotFoundException('Reporte no encontrado');
     }

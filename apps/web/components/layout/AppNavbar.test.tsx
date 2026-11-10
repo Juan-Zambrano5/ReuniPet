@@ -62,3 +62,35 @@ describe('AppNavbar (HU12 + HU16)', () => {
     expect(screen.getByLabelText('Avatar de usuario')).toBeInTheDocument();
   });
 });
+
+describe('AppNavbar (HU18)', () => {
+  it('"Administración" solo aparece con rol ADMIN', async () => {
+    window.localStorage.setItem('reunipet:token', 'jwt');
+    window.localStorage.setItem('reunipet:nombre', 'Ana');
+    window.localStorage.setItem('reunipet:rol', 'USUARIO');
+    const { unmount } = render(<AppNavbar />);
+    await screen.findByLabelText('Usuario: Ana');
+    expect(
+      screen.queryByRole('link', { name: 'Administración' }),
+    ).not.toBeInTheDocument();
+    unmount();
+
+    window.localStorage.setItem('reunipet:rol', 'ADMIN');
+    render(<AppNavbar />);
+    expect(
+      await screen.findByRole('link', { name: 'Administración' }),
+    ).toHaveAttribute('href', '/admin');
+  });
+
+  it('cerrar sesión borra también el rol', async () => {
+    window.localStorage.setItem('reunipet:token', 'jwt');
+    window.localStorage.setItem('reunipet:nombre', 'Ana');
+    window.localStorage.setItem('reunipet:rol', 'ADMIN');
+    render(<AppNavbar />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cerrar sesión' }));
+    expect(window.localStorage.getItem('reunipet:rol')).toBeNull();
+    expect(
+      screen.queryByRole('link', { name: 'Administración' }),
+    ).not.toBeInTheDocument();
+  });
+});

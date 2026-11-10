@@ -13,6 +13,7 @@ import {
   Usuario,
 } from '@prisma/client';
 import {
+  AdminReporteItem,
   ContactoPropietarioResponse,
   EstadoReporte as SharedEstadoReporte,
   FotografiaResponse,
@@ -28,6 +29,11 @@ import { CreateReporteDto } from './dto/create-reporte.dto';
 import { ListReportesDto } from './dto/list-reportes.dto';
 import { UpdateReporteDto } from './dto/update-reporte.dto';
 import { UpdateUbicacionDto } from './dto/update-ubicacion.dto';
+
+const ADMIN_INCLUDE = {
+  fotos: { orderBy: { orden: 'asc' }, take: 1 },
+  propietario: { select: { nombre: true, email: true } },
+} satisfies Prisma.ReporteInclude;
 
 @Injectable()
 export class ReportesService {
@@ -69,12 +75,21 @@ export class ReportesService {
     return this.toResponse(reporte, user.id);
   }
 
-  async findById(id: string, userId: string | null): Promise<ReporteResponse | null> {
+  async findById(
+    id: string,
+    userId: string | null,
+    esAdmin = false,
+  ): Promise<ReporteResponse | null> {
     const reporte = await this.prisma.reporte.findUnique({
       where: { id },
       include: { fotos: { orderBy: { orden: 'asc' } } },
     });
     if (!reporte) return null;
+    // HU18: un reporte moderado solo lo ven su dueño y los administradores
+    // (para el resto es 404, sin revelar que existe).
+    if (reporte.moderado && reporte.propietarioId !== userId && !esAdmin) {
+      return null;
+    }
     const response = this.toResponse(reporte, userId);
     response.fotos = reporte.fotos.map((f) => ({
       id: f.id,
@@ -231,6 +246,67 @@ export class ReportesService {
   }
 
   /**
+   * HU18: oculta (con motivo) o restaura un reporte. No borra nada: las
+   * coincidencias se filtran al consultar, igual que con RECUPERADA (HU11).
+   * Al restaurar se vuelve a comparar, porque mientras estuvo oculto el
+   * matching lo ignoró. Solo lo llama AdminController (guard de ADMIN).
+   */
+  async moderar(
+    id: string,
+    moderado: boolean,
+    motivo: string | undefined,
+    admin: Usuario,
+  ): Promise<AdminReporteItem> {
+    const reporte = await this.prisma.reporte.findUnique({ where: { id } });
+    if (!reporte) {
+      throw new NotFoundException('Reporte no encontrado');
+    }
+
+    const actualizado = await this.prisma.reporte.update({
+      where: { id },
+      data: { moderado, motivoModeracion: moderado ? (motivo ?? null) : null },
+      include: ADMIN_INCLUDE,
+    });
+
+    if (reporte.moderado && !moderado) {
+      await this.matching.compararReporte(id);
+    }
+
+    return this.toAdminItem(actualizado, admin.id);
+  }
+
+  /**
+   * HU18: todos los reportes para el administrador (o solo los ocultos con
+   * moderados=true), más reciente primero.
+   * shortcut: sin paginación; agregarla si el volumen de reportes crece.
+   */
+  async listAdmin(
+    soloModerados: boolean,
+    admin: Usuario,
+  ): Promise<AdminReporteItem[]> {
+    const reportes = await this.prisma.reporte.findMany({
+      where: soloModerados ? { moderado: true } : {},
+      orderBy: { createdAt: 'desc' },
+      include: ADMIN_INCLUDE,
+    });
+    return reportes.map((r) => this.toAdminItem(r, admin.id));
+  }
+
+  private toAdminItem(
+    reporte: Reporte & {
+      fotos: Fotografia[];
+      propietario: { nombre: string; email: string };
+    },
+    adminId: string,
+  ): AdminReporteItem {
+    return {
+      ...this.toListItem(reporte, adminId),
+      propietarioNombre: reporte.propietario.nombre,
+      propietarioEmail: reporte.propietario.email,
+    };
+  }
+
+  /**
    * HU10 AC1/AC2: nombre + medio de contacto del propietario del reporte.
    * Cada solicitud queda registrada (quién la pidió y cuándo).
    */
@@ -240,9 +316,9 @@ export class ReportesService {
   ): Promise<ContactoPropietarioResponse> {
     const reporte = await this.prisma.reporte.findUnique({
       where: { id },
-      select: { id: true, propietario: true },
+      select: { id: true, moderado: true, propietario: true },
     });
-    if (!reporte) {
+    if (!reporte || reporte.moderado) {
       throw new NotFoundException('Reporte no encontrado');
     }
 
@@ -280,6 +356,7 @@ export class ReportesService {
                 },
                 reporteEncontrada: {
                   estado: { not: EstadoReporte.RECUPERADA },
+                  moderado: false,
                 },
               },
             },
@@ -290,9 +367,9 @@ export class ReportesService {
 
     return reportes.map((r) => ({
       ...this.toListItem(r, user.id),
-      // Un reporte RECUPERADA no muestra alertas (HU11): cuenta 0.
+      // RECUPERADA (HU11) u oculto (HU18) no muestra alertas: cuenta 0.
       coincidenciasPendientes:
-        r.estado === EstadoReporte.RECUPERADA
+        r.estado === EstadoReporte.RECUPERADA || r.moderado
           ? 0
           : r._count.coincidenciasComoPerdida,
     }));
@@ -318,6 +395,8 @@ export class ReportesService {
       // HU7: sin tipo = ambos tipos (PERDIDA y ENCONTRADA)
       tipo: dto.tipo,
       estado: { not: EstadoReporte.RECUPERADA },
+      // HU18: los reportes ocultos por moderación no salen en el listado.
+      moderado: false,
     };
 
     const hayFiltros =
@@ -478,6 +557,8 @@ export class ReportesService {
       latitud,
       longitud,
       esPropietario,
+      moderado: reporte.moderado,
+      motivoModeracion: reporte.motivoModeracion,
       fotoPrincipal:
         reporte.fotos.length > 0
           ? this.toFotografiaResponse(reporte.fotos[0])
@@ -543,6 +624,8 @@ export class ReportesService {
       latitud,
       longitud,
       esPropietario,
+      moderado: reporte.moderado,
+      motivoModeracion: reporte.motivoModeracion,
       createdAt: reporte.createdAt.toISOString(),
       updatedAt: reporte.updatedAt.toISOString(),
     };

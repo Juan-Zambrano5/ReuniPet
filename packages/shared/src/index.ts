@@ -15,6 +15,12 @@ export enum EstadoCoincidencia {
   DESCARTADA = 'DESCARTADA',
 }
 
+// HU18: el rol ADMIN solo se asigna desde el seed.
+export enum RolUsuario {
+  USUARIO = 'USUARIO',
+  ADMIN = 'ADMIN',
+}
+
 // HU17: PATCH /reportes/:id. Solo se envían los campos que cambian; la
 // ubicación se edita con PATCH /reportes/:id/ubicacion.
 export interface UpdateReporteInput {
@@ -57,6 +63,9 @@ export interface ReporteResponse {
   latitud: number | null;
   longitud: number | null;
   esPropietario: boolean;
+  // HU18: los reportes moderados solo los ven su dueño y los administradores.
+  moderado: boolean;
+  motivoModeracion: string | null;
   createdAt: string;
   updatedAt: string;
   fotos?: FotografiaResponse[];
@@ -82,6 +91,9 @@ export interface ReporteListItem {
   latitud: number | null;
   longitud: number | null;
   esPropietario: boolean;
+  // HU18: los reportes moderados solo los ven su dueño y los administradores.
+  moderado: boolean;
+  motivoModeracion: string | null;
   fotoPrincipal: FotografiaResponse | null;
   createdAt: string;
   updatedAt: string;
@@ -153,6 +165,7 @@ export interface UsuarioPublicoResponse {
   nombre: string;
   email: string;
   telefono: string | null;
+  rol: RolUsuario;
   createdAt: string;
 }
 
@@ -175,4 +188,17 @@ export interface LoginResponse {
 // ENCONTRADA el valor es siempre 0.
 export interface MiReporteItem extends ReporteListItem {
   coincidenciasPendientes: number;
+}
+
+// HU18: PATCH /admin/reportes/:id/moderacion. El motivo es obligatorio al
+// ocultar; al restaurar se borra.
+export interface ModeracionInput {
+  moderado: boolean;
+  motivo?: string;
+}
+
+// HU18: GET /admin/reportes — incluye el nombre y correo del dueño.
+export interface AdminReporteItem extends ReporteListItem {
+  propietarioNombre: string;
+  propietarioEmail: string;
 }

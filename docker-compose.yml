@@ -33,6 +33,8 @@ services:
       # HU16: sin JWT_SECRET la API no arranca (no hay valor por defecto).
       JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en .env (mínimo 32 caracteres)}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # En producción X-User-Id nunca se acepta, aunque llegue AUTH_MODE=dev.
       NODE_ENV: production
     ports:

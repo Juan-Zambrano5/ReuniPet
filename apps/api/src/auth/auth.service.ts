@@ -7,7 +7,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma, Usuario } from '@prisma/client';
-import { LoginResponse, UsuarioPublicoResponse } from '@reunipet/shared';
+import {
+  LoginResponse,
+  RolUsuario,
+  UsuarioPublicoResponse,
+} from '@reunipet/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -27,6 +31,7 @@ const USUARIO_PUBLICO = {
   nombre: true,
   email: true,
   telefono: true,
+  rol: true,
   createdAt: true,
 } as const;
 
@@ -39,13 +44,14 @@ function obtenerHashDeRelleno(): Promise<string> {
 }
 
 export function aUsuarioPublico(
-  u: Pick<Usuario, 'id' | 'nombre' | 'email' | 'telefono' | 'createdAt'>,
+  u: Pick<Usuario, 'id' | 'nombre' | 'email' | 'telefono' | 'rol' | 'createdAt'>,
 ): UsuarioPublicoResponse {
   return {
     id: u.id,
     nombre: u.nombre,
     email: u.email,
     telefono: u.telefono,
+    rol: u.rol as RolUsuario,
     createdAt: u.createdAt.toISOString(),
   };
 }
@@ -111,7 +117,7 @@ export class AuthService {
         },
         select: USUARIO_PUBLICO,
       });
-      return { ...usuario, createdAt: usuario.createdAt.toISOString() };
+      return aUsuarioPublico(usuario);
     } catch (error) {
       // Carrera de dos registros simultáneos con el mismo correo.
       if (

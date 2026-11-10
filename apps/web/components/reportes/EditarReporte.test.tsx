@@ -41,6 +41,8 @@ const reporte: ReporteResponse = {
   latitud: null,
   longitud: null,
   esPropietario: true,
+  moderado: false,
+  motivoModeracion: null,
   estado: EstadoReporte.PERDIDA,
   createdAt: '2026-09-28T10:00:00.000Z',
   updatedAt: '2026-09-28T10:00:00.000Z',

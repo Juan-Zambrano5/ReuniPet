@@ -86,7 +86,7 @@ describe('HU12 — POST /auth/register', () => {
     const usuario = res.body as UsuarioBody;
 
     expect(Object.keys(usuario).sort()).toEqual(
-      ['createdAt', 'email', 'id', 'nombre', 'telefono'].sort(),
+      ['createdAt', 'email', 'id', 'nombre', 'rol', 'telefono'].sort(),
     );
     expect(usuario).toMatchObject({
       nombre: 'Ana Registro',
@@ -181,6 +181,19 @@ describe('HU12 — POST /auth/register', () => {
     const res = await registrar(body).expect(400);
     expect(JSON.stringify((res.body as { message: unknown }).message)).toContain(
       fragmento,
+    );
+    expect(await prisma.usuario.count({ where: { email: EMAIL } })).toBe(0);
+  });
+
+  it('HU18: registrarse con rol ADMIN → 400 y no crea la cuenta', async () => {
+    const res = await registrar({
+      nombre: 'Ana',
+      email: EMAIL,
+      password: PASSWORD,
+      rol: 'ADMIN',
+    }).expect(400);
+    expect(JSON.stringify((res.body as { message: unknown }).message)).toContain(
+      'rol',
     );
     expect(await prisma.usuario.count({ where: { email: EMAIL } })).toBe(0);
   });

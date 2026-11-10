@@ -151,6 +151,25 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
         <StatusBadge variant={badge.variante}>{badge.texto}</StatusBadge>
       </div>
 
+      {/* HU18 AC1: solo el dueño (o un admin) llega a ver un reporte oculto. */}
+      {reporte.moderado && (
+        <div
+          role="status"
+          className="mt-4 rounded-card border border-border bg-surface p-4"
+          data-testid="aviso-moderado"
+        >
+          <p className="text-sm font-semibold text-text">Oculto por moderación</p>
+          {reporte.motivoModeracion && (
+            <p className="mt-1 text-sm text-text">
+              Motivo: {reporte.motivoModeracion}
+            </p>
+          )}
+          <p className="mt-1 text-sm text-muted">
+            Este reporte no aparece en los listados públicos ni en las alertas.
+          </p>
+        </div>
+      )}
+
       <div className="mt-6 overflow-hidden rounded-card border border-border bg-card shadow-card">
         {/* HU13 AC2: sin fotos, un mensaje de reemplazo (nunca un espacio roto). */}
         {/* La caja se adapta a la proporción de la foto (sin recortarla):

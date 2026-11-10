@@ -21,6 +21,8 @@ function makeReporte(overrides: Partial<Reporte>): Reporte {
     latitud: null,
     longitud: null,
     estado: 'PERDIDA',
+    moderado: false,
+    motivoModeracion: null,
     propietarioId: 'user-1',
     createdAt: now,
     updatedAt: now,
@@ -169,7 +171,7 @@ describe('MatchingService (HU5)', () => {
       await service.compararReporte('per-1');
 
       expect(prismaMock.reporte.findMany).toHaveBeenCalledWith({
-        where: { tipo: 'ENCONTRADA', estado: { not: 'RECUPERADA' } },
+        where: { tipo: 'ENCONTRADA', estado: { not: 'RECUPERADA' }, moderado: false },
       });
     });
 
@@ -178,6 +180,17 @@ describe('MatchingService (HU5)', () => {
       prismaMock.reporte.findUnique.mockResolvedValue(recuperada);
 
       await service.compararReporte('per-9');
+
+      expect(prismaMock.reporte.findMany).not.toHaveBeenCalled();
+      expect(prismaMock.coincidencia.create).not.toHaveBeenCalled();
+    });
+
+    it('HU18: no compara un reporte oculto por moderación', async () => {
+      prismaMock.reporte.findUnique.mockResolvedValue(
+        makeReporte({ id: 'per-8', moderado: true }),
+      );
+
+      await service.compararReporte('per-8');
 
       expect(prismaMock.reporte.findMany).not.toHaveBeenCalled();
       expect(prismaMock.coincidencia.create).not.toHaveBeenCalled();

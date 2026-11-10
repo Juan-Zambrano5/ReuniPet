@@ -25,6 +25,8 @@ const reporte: ReporteResponse = {
   latitud: 10.12,
   longitud: -66.99,
   esPropietario: false,
+  moderado: false,
+  motivoModeracion: null,
   estado: EstadoReporte.PERDIDA,
   createdAt: '2026-09-28T10:00:00.000Z',
   updatedAt: '2026-09-28T10:00:00.000Z',
@@ -88,6 +90,8 @@ describe('ReporteDetalle (HU6 AC3)', () => {
       latitud: 10.12345,
       longitud: -66.98765,
       esPropietario: true,
+      moderado: false,
+      motivoModeracion: null,
     });
 
     render(<ReporteDetalle id="rep-1" />);
@@ -324,6 +328,8 @@ describe('ReporteDetalle (HU14)', () => {
   const duenoRecuperada: ReporteResponse = {
     ...reporte,
     esPropietario: true,
+    moderado: false,
+    motivoModeracion: null,
     estado: EstadoReporte.RECUPERADA,
   };
 
@@ -447,5 +453,28 @@ describe('ReporteDetalle (HU17)', () => {
     expect(
       screen.queryByRole('link', { name: /editar/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe('ReporteDetalle (HU18)', () => {
+  it('AC1: al dueño le avisa que está oculto y por qué', async () => {
+    getReporteMock.mockResolvedValue({
+      ...reporte,
+      esPropietario: true,
+      moderado: true,
+      motivoModeracion: 'Información duplicada',
+    });
+    render(<ReporteDetalle id="rep-1" />);
+
+    const aviso = await screen.findByTestId('aviso-moderado');
+    expect(aviso).toHaveTextContent('Oculto por moderación');
+    expect(aviso).toHaveTextContent('Motivo: Información duplicada');
+  });
+
+  it('un reporte visible no muestra el aviso', async () => {
+    getReporteMock.mockResolvedValue(reporte);
+    render(<ReporteDetalle id="rep-1" />);
+    await screen.findByText('Detalle del reporte');
+    expect(screen.queryByTestId('aviso-moderado')).not.toBeInTheDocument();
   });
 });

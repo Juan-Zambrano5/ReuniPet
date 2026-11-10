@@ -62,6 +62,8 @@ const reportePerdida = {
   latitud: null,
   longitud: null,
   esPropietario: true,
+  moderado: false,
+  motivoModeracion: null,
   estado: EstadoReporte.PERDIDA,
   createdAt: '2026-09-28T10:00:00.000Z',
   updatedAt: '2026-09-28T10:00:00.000Z',
@@ -74,6 +76,8 @@ const reporteEncontrada = {
   tipo: TipoReporte.ENCONTRADA,
   estado: EstadoReporte.ENCONTRADA,
   esPropietario: false,
+  moderado: false,
+  motivoModeracion: null,
 };
 
 describe('Comparador (HU10 — información de contacto)', () => {

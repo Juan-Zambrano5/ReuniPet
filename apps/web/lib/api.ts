@@ -1,4 +1,5 @@
 import {
+  AdminReporteItem,
   AlertaResponse,
   ContactoPropietarioResponse,
   CreateReporteInput,
@@ -7,6 +8,7 @@ import {
   LoginInput,
   LoginResponse,
   MiReporteItem,
+  ModeracionInput,
   RegisterInput,
   ReporteResponse,
   TipoReporte,
@@ -187,6 +189,32 @@ export async function actualizarUbicacion(
     throw new ApiError(res.status, await res.json().catch(() => ({})));
   }
   return (await res.json()) as ReporteResponse;
+}
+
+// HU18: reportes para el administrador (todos, o solo los ocultos).
+export async function getAdminReportes(
+  soloModerados = false,
+): Promise<AdminReporteItem[]> {
+  const res = await apiFetch(
+    `/admin/reportes${soloModerados ? '?moderados=true' : ''}`,
+    { cache: 'no-store' },
+  );
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
+  return (await res.json()) as AdminReporteItem[];
+}
+
+// HU18: ocultar (con motivo) o restaurar un reporte.
+export async function moderarReporte(
+  id: string,
+  input: ModeracionInput,
+): Promise<AdminReporteItem> {
+  const res = await apiFetch(`/admin/reportes/${id}/moderacion`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
+  return (await res.json()) as AdminReporteItem;
 }
 
 // HU10: nombre + medio de contacto del propietario de un reporte.

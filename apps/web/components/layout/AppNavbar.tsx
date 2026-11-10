@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import {
   SESION_EVENTO,
   cerrarSesion,
+  esAdminSesion,
   leerNombreSesion,
   limpiarSesionAntigua,
 } from '@/lib/sesion';
@@ -46,16 +47,27 @@ const LINKS: NavLink[] = [
   },
 ];
 
+// HU18: solo para ADMIN (la API responde 403 a cualquier otro).
+const LINK_ADMIN: NavLink = {
+  href: '/admin',
+  label: 'Administración',
+  isActive: (p) => p.startsWith('/admin'),
+};
+
 export function AppNavbar(): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
   // HU16: nombre de la sesión (token JWT). Se lee tras montar (localStorage no
   // existe en el servidor) y se refresca al entrar, salir u otra pestaña.
   const [nombre, setNombre] = React.useState<string | null>(null);
+  const [esAdmin, setEsAdmin] = React.useState(false);
   React.useEffect(() => {
     // SPRINT4_PLAN §3.12: la sesión simulada anterior (x-user-id) se descarta.
     limpiarSesionAntigua();
-    const leer = (): void => setNombre(leerNombreSesion());
+    const leer = (): void => {
+      setNombre(leerNombreSesion());
+      setEsAdmin(esAdminSesion());
+    };
     leer();
     window.addEventListener(SESION_EVENTO, leer);
     window.addEventListener('storage', leer);
@@ -85,7 +97,7 @@ export function AppNavbar(): React.JSX.Element {
           className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
           aria-label="Navegación principal"
         >
-          {LINKS.map((link) => {
+          {(esAdmin ? [...LINKS, LINK_ADMIN] : LINKS).map((link) => {
             const active = link.isActive(pathname);
             return (
               <Link

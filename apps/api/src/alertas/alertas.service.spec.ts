@@ -50,8 +50,8 @@ describe('AlertasService (HU4)', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           estado: { in: ['PENDIENTE', 'VISTA'] },
-          reportePerdida: { propietarioId: 'user-1', estado: { not: 'RECUPERADA' } },
-          reporteEncontrada: { estado: { not: 'RECUPERADA' } },
+          reportePerdida: { propietarioId: 'user-1', estado: { not: 'RECUPERADA' }, moderado: false },
+          reporteEncontrada: { estado: { not: 'RECUPERADA' }, moderado: false },
         }),
       }),
     );

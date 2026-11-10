@@ -20,6 +20,7 @@ const user: Usuario = {
   email: 'demo@reunipet.app',
   telefono: null,
   passwordHash: null,
+  rol: 'USUARIO',
   createdAt: new Date(),
 };
 
@@ -222,7 +223,7 @@ describe('ReportesService', () => {
 
       expect(prismaMock.reporte.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tipo: 'PERDIDA', estado: { not: 'RECUPERADA' } },
+          where: { tipo: 'PERDIDA', estado: { not: 'RECUPERADA' }, moderado: false },
           orderBy: { createdAt: 'desc' },
         }),
       );
@@ -316,7 +317,7 @@ describe('ReportesService', () => {
 
       expect(prismaMock.reporte.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { tipo: 'ENCONTRADA', estado: { not: 'RECUPERADA' } },
+          where: { tipo: 'ENCONTRADA', estado: { not: 'RECUPERADA' }, moderado: false },
         }),
       );
       expect(result.items[0].tipo).toBe('ENCONTRADA');
