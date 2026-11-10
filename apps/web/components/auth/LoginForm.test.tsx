@@ -4,6 +4,7 @@ import {
   LoginForm,
   MENSAJE_BLOQUEO,
   MENSAJE_CREDENCIALES,
+  MENSAJE_SUSPENDIDA,
 } from '@/components/auth/LoginForm';
 
 const push = jest.fn();
@@ -113,5 +114,31 @@ describe('LoginForm (HU16)', () => {
     expect(screen.getByTestId('aviso-sesion')).toHaveTextContent(
       'Tu sesión expiró',
     );
+  });
+});
+
+describe('LoginForm (HU19)', () => {
+  it('muestra "Tu cuenta está suspendida" cuando llega por CUENTA_SUSPENDIDA (distinto de "expiró")', () => {
+    render(<LoginForm motivo="suspendida" />);
+    const aviso = screen.getByTestId('aviso-sesion');
+    expect(aviso).toHaveTextContent(MENSAJE_SUSPENDIDA);
+    expect(aviso).not.toHaveTextContent('expiró');
+  });
+
+  it('login con la contraseña correcta de una cuenta suspendida (403) lo informa y no guarda sesión', async () => {
+    global.fetch = respuesta(403, {
+      code: 'CUENTA_SUSPENDIDA',
+      message: 'Tu cuenta está suspendida',
+    });
+    render(<LoginForm />);
+    llenar();
+    expect(await screen.findByText(MENSAJE_SUSPENDIDA)).toBeInTheDocument();
+    expect(window.localStorage.getItem('reunipet:token')).toBeNull();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('un motivo desconocido no muestra aviso', () => {
+    render(<LoginForm motivo="toString" />);
+    expect(screen.queryByTestId('aviso-sesion')).not.toBeInTheDocument();
   });
 });

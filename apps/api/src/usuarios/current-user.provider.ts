@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Usuario } from '@prisma/client';
+import { CUENTA_SUSPENDIDA } from '@reunipet/shared';
 import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { SESION_INVALIDA, TokenService } from '../auth/token.service';
@@ -19,6 +20,7 @@ export interface CurrentUserProvider {
 
 export const DEMO_EMAIL = 'demo@reunipet.app';
 export const SESION_REQUERIDA = 'Inicia sesión para continuar';
+export const MENSAJE_CUENTA_SUSPENDIDA = 'Tu cuenta está suspendida';
 
 /**
  * X-User-Id (la sesión simulada de los Sprints 1-3) solo se acepta con
@@ -72,9 +74,18 @@ export class JwtCurrentUserProvider implements CurrentUserProvider {
   }
 
   // Un token válido de un usuario que ya no existe también es 401.
+  // HU19: se consulta `activo` en cada petición, así que un token emitido
+  // antes de suspender deja de servir en la siguiente (privada u opcional).
   private async buscar(id: string): Promise<Usuario> {
     const user = await this.prisma.usuario.findUnique({ where: { id } });
     if (!user) throw new UnauthorizedException(SESION_INVALIDA);
+    if (!user.activo) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        code: CUENTA_SUSPENDIDA,
+        message: MENSAJE_CUENTA_SUSPENDIDA,
+      });
+    }
     return user;
   }
 }

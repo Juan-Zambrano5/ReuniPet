@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   HttpException,
   InternalServerErrorException,
   UnauthorizedException,
@@ -149,6 +150,8 @@ describe('AuthService.login (HU16)', () => {
       email: EMAIL,
       telefono: null,
       passwordHash: hash,
+      rol: 'USUARIO',
+      activo: true,
       createdAt: new Date('2026-11-02T00:00:00Z'),
     });
     firmar = jest.fn().mockResolvedValue('token-firmado');
@@ -177,6 +180,7 @@ describe('AuthService.login (HU16)', () => {
         nombre: 'Ana',
         email: EMAIL,
         telefono: null,
+        rol: 'USUARIO',
         createdAt: '2026-11-02T00:00:00.000Z',
       },
     });
@@ -236,6 +240,43 @@ describe('AuthService.login (HU16)', () => {
       await login(EMAIL, 'mala').catch(() => undefined);
     }
     await expect(login(EMAIL, PASSWORD)).resolves.toHaveProperty('token');
+  });
+
+  describe('HU19: cuenta suspendida', () => {
+    beforeEach(() => {
+      findFirst.mockResolvedValue({
+        id: 'u-1',
+        nombre: 'Ana',
+        email: EMAIL,
+        telefono: null,
+        passwordHash: hash,
+        rol: 'USUARIO',
+        activo: false,
+        createdAt: new Date('2026-11-02T00:00:00Z'),
+      });
+    });
+
+    it('contraseña correcta → 403 CUENTA_SUSPENDIDA sin token', async () => {
+      const err: unknown = await login(EMAIL, PASSWORD).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ForbiddenException);
+      expect((err as ForbiddenException).getResponse()).toMatchObject({
+        code: 'CUENTA_SUSPENDIDA',
+        message: 'Tu cuenta está suspendida',
+      });
+      expect(firmar).not.toHaveBeenCalled();
+    });
+
+    it('contraseña incorrecta → 401 genérico y cuenta para el límite', async () => {
+      for (let i = 0; i < 5; i++) {
+        await expect(login(EMAIL, 'mala')).rejects.toThrow(
+          CREDENCIALES_INVALIDAS,
+        );
+      }
+      const bloqueo: unknown = await login(EMAIL, PASSWORD).catch(
+        (e: unknown) => e,
+      );
+      expect((bloqueo as HttpException).getStatus()).toBe(429);
+    });
   });
 });
 

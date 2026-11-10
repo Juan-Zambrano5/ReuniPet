@@ -16,6 +16,8 @@ model Usuario {
   passwordHash String?
   // HU18: el primer ADMIN sale del seed (ADMIN_EMAIL/ADMIN_PASSWORD).
   rol       RolUsuario @default(USUARIO)
+  // HU19: false = suspendido. Se verifica en cada petición, no solo al entrar.
+  activo    Boolean    @default(true)
   createdAt DateTime  @default(now())
   reportes  Reporte[]
   contactosSolicitados ContactoSolicitud[] @relation("ContactoSolicitante")

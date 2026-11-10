@@ -1,4 +1,9 @@
-import { getMisReportes, getSessionHeaders, iniciarSesion } from '@/lib/api';
+import {
+  getMisReportes,
+  getReportes,
+  getSessionHeaders,
+  iniciarSesion,
+} from '@/lib/api';
 import { navegacion, rutaSegura, urlLogin } from '@/lib/sesion';
 
 function respuesta(status: number, body: unknown = {}): jest.Mock {
@@ -73,6 +78,52 @@ describe('sesión con token (HU16)', () => {
     expect(rutaSegura('/login?x=1')).toBeNull();
     expect(urlLogin('requerida', 'https://evil.com')).toBe(
       '/login?motivo=requerida',
+    );
+  });
+});
+
+describe('cuenta suspendida (HU19)', () => {
+  let ir: jest.SpyInstance;
+
+  // Respuesta con clone(), como la de fetch real: el body se lee dos veces.
+  function suspendida(): jest.Mock {
+    const body = { code: 'CUENTA_SUSPENDIDA', message: 'Tu cuenta está suspendida' };
+    const res = {
+      ok: false,
+      status: 401,
+      json: () => Promise.resolve(body),
+      clone: () => res,
+    };
+    return jest.fn().mockResolvedValue(res);
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.localStorage.setItem('reunipet:token', 'jwt');
+    window.localStorage.setItem('reunipet:nombre', 'Ana');
+    window.localStorage.setItem('reunipet:rol', 'USUARIO');
+    ir = jest.spyOn(navegacion, 'ir').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => ir.mockRestore());
+
+  it('ruta privada: cierra la sesión y lleva a /login con motivo=suspendida', async () => {
+    global.fetch = suspendida();
+    await expect(getMisReportes()).rejects.toMatchObject({ status: 401 });
+    expect(window.localStorage.getItem('reunipet:token')).toBeNull();
+    expect(window.localStorage.getItem('reunipet:rol')).toBeNull();
+    expect(ir).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/login\?motivo=suspendida/),
+    );
+  });
+
+  it('ruta pública: no reintenta como anónimo, cierra la sesión y lleva a /login', async () => {
+    global.fetch = suspendida();
+    await expect(getReportes()).rejects.toMatchObject({ status: 401 });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem('reunipet:token')).toBeNull();
+    expect(ir).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/login\?motivo=suspendida/),
     );
   });
 });

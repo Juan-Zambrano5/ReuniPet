@@ -7,6 +7,7 @@ import { Loader2 } from 'lucide-react';
 import { FormField } from '@/components/FormField';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { CUENTA_SUSPENDIDA } from '@reunipet/shared';
 import { ApiError, guardarSesion, iniciarSesion } from '@/lib/api';
 import { rutaSegura, type MotivoLogin } from '@/lib/sesion';
 
@@ -18,10 +19,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const MENSAJE_CREDENCIALES = 'Correo o contraseña incorrectos';
 export const MENSAJE_BLOQUEO =
   'Demasiados intentos fallidos. Intenta de nuevo en 15 minutos.';
+export const MENSAJE_SUSPENDIDA =
+  'Tu cuenta está suspendida. Contacta con un administrador.';
 
 const AVISOS: Record<MotivoLogin, string> = {
   expirada: 'Tu sesión expiró. Inicia sesión de nuevo para continuar.',
   requerida: 'Inicia sesión para continuar.',
+  suspendida: MENSAJE_SUSPENDIDA,
 };
 
 function validar(email: string, password: string): Errores {
@@ -41,6 +45,13 @@ function erroresDelServidor(error: unknown): Errores {
   }
   if (error.status === 401) return { general: MENSAJE_CREDENCIALES };
   if (error.status === 429) return { general: MENSAJE_BLOQUEO };
+  // HU19: solo llega con la contraseña correcta de una cuenta suspendida.
+  if (
+    error.status === 403 &&
+    (error.body as { code?: unknown } | undefined)?.code === CUENTA_SUSPENDIDA
+  ) {
+    return { general: MENSAJE_SUSPENDIDA };
+  }
   if (error.status === 400) {
     const body = error.body as { message?: string | string[] } | undefined;
     const mensajes = Array.isArray(body?.message)
@@ -74,7 +85,9 @@ export function LoginForm({
   const [enviando, setEnviando] = React.useState(false);
 
   const aviso =
-    motivo === 'expirada' || motivo === 'requerida' ? AVISOS[motivo] : null;
+    motivo && Object.prototype.hasOwnProperty.call(AVISOS, motivo)
+      ? AVISOS[motivo as MotivoLogin]
+      : null;
 
   async function enviar(ev: React.FormEvent<HTMLFormElement>): Promise<void> {
     ev.preventDefault();

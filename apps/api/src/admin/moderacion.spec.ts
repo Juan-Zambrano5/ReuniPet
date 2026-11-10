@@ -20,6 +20,7 @@ const admin: Usuario = {
   telefono: null,
   passwordHash: null,
   rol: 'ADMIN',
+  activo: true,
   createdAt: fecha,
 };
 const reporte = {

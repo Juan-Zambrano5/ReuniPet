@@ -202,3 +202,23 @@ export interface AdminReporteItem extends ReporteListItem {
   propietarioNombre: string;
   propietarioEmail: string;
 }
+
+// HU19: código de error de una cuenta suspendida. Login con la contraseña
+// correcta → 403; token vigente de un usuario suspendido → 401.
+export const CUENTA_SUSPENDIDA = 'CUENTA_SUSPENDIDA';
+
+// HU19: GET /admin/usuarios. Nunca incluye passwordHash.
+export interface AdminUsuarioItem {
+  id: string;
+  nombre: string;
+  email: string;
+  rol: RolUsuario;
+  activo: boolean;
+  createdAt: string;
+  totalReportes: number;
+}
+
+// HU19: PATCH /admin/usuarios/:id/activo.
+export interface ActivoInput {
+  activo: boolean;
+}

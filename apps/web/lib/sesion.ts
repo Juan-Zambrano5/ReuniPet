@@ -19,7 +19,8 @@ export const SESION_EVENTO = 'reunipet:sesion';
 // cargar la nueva versión (SPRINT4_PLAN §3.12).
 const CLAVES_ANTIGUAS = ['x-user-id', 'x-user-nombre'];
 
-export type MotivoLogin = 'expirada' | 'requerida';
+// HU19: 'suspendida' = el API respondió CUENTA_SUSPENDIDA.
+export type MotivoLogin = 'expirada' | 'requerida' | 'suspendida';
 
 function almacen(): Storage | null {
   if (typeof window === 'undefined') return null;
@@ -108,9 +109,13 @@ export const navegacion = {
  * HU16 AC4: un 401 en cualquier pantalla limpia la sesión y lleva a /login.
  * Si había token se muestra "Tu sesión expiró"; si no, "Inicia sesión".
  */
-export function sesionNoAutorizada(): void {
+export function sesionNoAutorizada(suspendida = false): void {
   if (typeof window === 'undefined') return;
-  const motivo: MotivoLogin = haySesion() ? 'expirada' : 'requerida';
+  const motivo: MotivoLogin = suspendida
+    ? 'suspendida'
+    : haySesion()
+      ? 'expirada'
+      : 'requerida';
   cerrarSesion();
   const { pathname, search } = window.location;
   if (pathname.startsWith('/login')) return;

@@ -21,6 +21,7 @@ const user: Usuario = {
   telefono: null,
   passwordHash: null,
   rol: 'USUARIO',
+  activo: true,
   createdAt: new Date(),
 };
 

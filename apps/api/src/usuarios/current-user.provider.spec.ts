@@ -6,7 +6,7 @@ import {
   SESION_REQUERIDA,
 } from './current-user.provider';
 
-const ANA = { id: 'u-ana', nombre: 'Ana' };
+const ANA = { id: 'u-ana', nombre: 'Ana', activo: true };
 
 function req(headers: Record<string, string>): Request {
   return { headers } as unknown as Request;
@@ -65,6 +65,19 @@ describe('JwtCurrentUserProvider (HU16)', () => {
     await expect(
       provider.getUser(req({ authorization: 'Bearer valido' })),
     ).rejects.toThrow(SESION_INVALIDA);
+  });
+
+  it('HU19: token vigente de un usuario suspendido → 401 CUENTA_SUSPENDIDA, también en rutas públicas', async () => {
+    findUnique.mockResolvedValue({ ...ANA, activo: false });
+    const r = req({ authorization: 'Bearer valido' });
+    for (const intento of [provider.getUser(r), provider.getOptionalUser(r)]) {
+      const err: unknown = await intento.catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(UnauthorizedException);
+      expect((err as UnauthorizedException).getResponse()).toMatchObject({
+        code: 'CUENTA_SUSPENDIDA',
+        message: 'Tu cuenta está suspendida',
+      });
+    }
   });
 
   it('sin AUTH_MODE=dev, X-User-Id se ignora', async () => {

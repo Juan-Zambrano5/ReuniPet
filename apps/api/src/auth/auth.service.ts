@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -8,11 +9,13 @@ import {
 } from '@nestjs/common';
 import { Prisma, Usuario } from '@prisma/client';
 import {
+  CUENTA_SUSPENDIDA,
   LoginResponse,
   RolUsuario,
   UsuarioPublicoResponse,
 } from '@reunipet/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { MENSAJE_CUENTA_SUSPENDIDA } from '../usuarios/current-user.provider';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginRateLimiter } from './login-rate-limiter';
@@ -85,6 +88,16 @@ export class AuthService {
     if (!usuario || !usuario.passwordHash || !valida) {
       this.limitador.registrarFallo(email);
       throw new UnauthorizedException(CREDENCIALES_INVALIDAS);
+    }
+
+    // HU19: solo con la contraseña correcta se informa la suspensión; con
+    // una incorrecta sigue el 401 genérico de arriba (no revela el estado).
+    if (!usuario.activo) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: CUENTA_SUSPENDIDA,
+        message: MENSAJE_CUENTA_SUSPENDIDA,
+      });
     }
 
     this.limitador.registrarExito(email);

@@ -1,6 +1,9 @@
 import {
   AdminReporteItem,
   AlertaResponse,
+  ActivoInput,
+  AdminUsuarioItem,
+  CUENTA_SUSPENDIDA,
   ContactoPropietarioResponse,
   CreateReporteInput,
   EstadoReporte,
@@ -46,6 +49,16 @@ export function getSessionHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/** HU19: ¿el error es una cuenta suspendida? Lee una copia del body. */
+async function esCuentaSuspendida(res: Response): Promise<boolean> {
+  try {
+    const body = (await res.clone().json()) as { code?: unknown };
+    return body.code === CUENTA_SUSPENDIDA;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Fetch al API con el token de la sesión. HU16 AC4: un 401 limpia la sesión y
  * lleva a /login ("Tu sesión expiró"); la promesa sigue devolviendo la
@@ -59,7 +72,7 @@ export async function apiFetch(
     ...init,
     headers: { ...getSessionHeaders(), ...(init.headers as Record<string, string>) },
   });
-  if (res.status === 401) sesionNoAutorizada();
+  if (res.status === 401) sesionNoAutorizada(await esCuentaSuspendida(res));
   return res;
 }
 
@@ -78,6 +91,11 @@ export async function apiFetchPublico(
     headers: { ...getSessionHeaders(), ...(init.headers as Record<string, string>) },
   });
   if (res.status !== 401 || !leerToken()) return res;
+  // HU19: una cuenta suspendida no sigue como anónima: va a /login con el motivo.
+  if (await esCuentaSuspendida(res)) {
+    sesionNoAutorizada(true);
+    return res;
+  }
   cerrarSesion();
   return fetch(`${API_URL}${path}`, init);
 }
@@ -215,6 +233,27 @@ export async function moderarReporte(
   });
   if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
   return (await res.json()) as AdminReporteItem;
+}
+
+// HU19: usuarios para el administrador.
+export async function getAdminUsuarios(): Promise<AdminUsuarioItem[]> {
+  const res = await apiFetch('/admin/usuarios', { cache: 'no-store' });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
+  return (await res.json()) as AdminUsuarioItem[];
+}
+
+// HU19: suspender (activo=false) o reactivar una cuenta.
+export async function cambiarActivoUsuario(
+  id: string,
+  input: ActivoInput,
+): Promise<AdminUsuarioItem> {
+  const res = await apiFetch(`/admin/usuarios/${id}/activo`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.json().catch(() => ({})));
+  return (await res.json()) as AdminUsuarioItem;
 }
 
 // HU10: nombre + medio de contacto del propietario de un reporte.
