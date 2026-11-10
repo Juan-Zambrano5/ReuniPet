@@ -20,6 +20,7 @@ import {
   getReporte,
   marcarVista,
 } from '@/lib/api';
+import { FotoReporte } from '@/components/fotos/FotoReporte';
 
 export default function ComparadorPage(): React.JSX.Element {
   const params = useParams<{ matchId: string }>();
@@ -168,8 +169,7 @@ export default function ComparadorPage(): React.JSX.Element {
           </div>
           <div className="mt-4 flex h-40 items-center justify-center overflow-hidden rounded-control bg-surface">
             {fotoPerdida ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
+              <FotoReporte
                 src={fotoUrl(fotoPerdida.url)}
                 alt="Foto de tu mascota perdida"
                 className="h-full w-full object-cover"
@@ -209,8 +209,7 @@ export default function ComparadorPage(): React.JSX.Element {
           </div>
           <div className="mt-4 flex h-40 items-center justify-center overflow-hidden rounded-control bg-surface">
             {fotoEncontrada ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img
+              <FotoReporte
                 src={fotoUrl(fotoEncontrada.url)}
                 alt="Foto de la mascota encontrada"
                 className="h-full w-full object-cover"

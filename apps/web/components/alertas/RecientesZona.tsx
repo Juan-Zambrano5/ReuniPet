@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { fotoUrl, getReportes } from '@/lib/api';
 import { tiempoRelativo } from '@/lib/tiempo';
+import { FotoReporte } from '@/components/fotos/FotoReporte';
 
 interface RecientesZonaProps {
   tipoInicial?: TipoReporte;
@@ -332,8 +333,7 @@ export function RecientesZona({
           >
             {reporte.fotoPrincipal && (
               <div className="mb-3 h-32 overflow-hidden rounded-control bg-surface">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <FotoReporte
                   src={fotoUrl(reporte.fotoPrincipal.url)}
                   alt={`Foto de ${reporte.especie}`}
                   className="h-full w-full object-cover"

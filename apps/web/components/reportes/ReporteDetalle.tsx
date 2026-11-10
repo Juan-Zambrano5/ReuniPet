@@ -13,6 +13,7 @@ import { BADGE_ESTADO, StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { ApiError, cambiarEstadoReporte, fotoUrl, getReporte } from '@/lib/api';
 import { tiempoRelativo } from '@/lib/tiempo';
+import { FotoReporte } from '@/components/fotos/FotoReporte';
 
 interface ReporteDetalleProps {
   id: string;
@@ -181,8 +182,7 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
           data-testid="galeria-principal"
         >
           {fotoActual ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
+            <FotoReporte
               src={fotoUrl(fotoActual.url)}
               alt={`Foto ${fotoIndex + 1} de ${reporte.especie}`}
               className="block h-auto max-h-[70vh] w-auto max-w-full object-contain"
@@ -220,11 +220,11 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
                 }`}
                 data-testid={`miniatura-${i}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <FotoReporte
                   src={fotoUrl(f.url)}
                   alt=""
                   className="h-full w-full object-cover"
+                  compacta
                 />
               </button>
             ))}

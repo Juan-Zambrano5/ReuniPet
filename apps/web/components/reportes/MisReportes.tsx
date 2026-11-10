@@ -8,6 +8,7 @@ import { BADGE_ESTADO, StatusBadge } from '@/components/ui/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { fotoUrl, getMisReportes } from '@/lib/api';
 import { tiempoRelativo } from '@/lib/tiempo';
+import { FotoReporte } from '@/components/fotos/FotoReporte';
 
 const FECHA = new Intl.DateTimeFormat('es', {
   day: 'numeric',
@@ -98,8 +99,7 @@ export function MisReportes(): React.JSX.Element {
             >
               <div className="mb-3 flex h-32 items-center justify-center overflow-hidden rounded-control bg-surface">
                 {r.fotoPrincipal ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
+                  <FotoReporte
                     src={fotoUrl(r.fotoPrincipal.url)}
                     alt={`Foto de ${r.especie}`}
                     className="h-full w-full object-cover"
