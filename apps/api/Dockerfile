@@ -41,6 +41,10 @@ COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY --from=build /app/apps/api/tsconfig.json ./apps/api/
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
+# src/ es imprescindible para el seed: desde HU16, prisma/seed.ts importa
+# ../src/auth/password-hasher (ts-node lo compila al arrancar). No se importa
+# desde dist/ porque el seed también corre fuera de Docker, donde no hay dist.
+COPY --from=build /app/apps/api/src ./apps/api/src
 # OpenSSL: Prisma detecta la versión de libssl para elegir su engine
 # criptográfico; bookworm-slim no la trae y avisa "failed to detect the
 # libssl/openssl version". Instalarlo en la imagen final elimina el aviso.
