@@ -5,9 +5,21 @@ encontradas: los propietarios publican reportes con fotos, la comunidad los
 consulta con filtros y el sistema detecta posibles coincidencias y genera
 alertas.
 
-**Rama con el trabajo completo:** `sprint3` (Sprints 1, 2 y 3). `main` y
-`sprint2` solo tienen hasta el Sprint 2; para probar el Sprint 3 cloná con
-`git clone --branch sprint3 <url>` (o `git checkout sprint3`).
+**Rama con el trabajo más reciente:** `sprint4` (Sprints 1 a 4). Cloná con
+`git clone --branch sprint4 <url>` (o `git checkout sprint4`).
+
+**Estado (Sprint 4):**
+
+- Registro e inicio de sesión con **JWT** (8 h) y límite de intentos; ya no
+  hay sesión simulada.
+- Roles `USUARIO` y `ADMIN`, con panel de **administración** (`/admin`):
+  ocultar y restaurar reportes (**moderación**) y **suspender** o reactivar
+  usuarios.
+- **Edición** de reportes por su dueño (recalcula coincidencias), cierre y
+  reapertura, y "Mis reportes".
+- **Mapa** real (Leaflet + OpenStreetMap) para marcar la ubicación al
+  reportar o editar, y para verla en el detalle (punto exacto para el dueño,
+  zona aproximada de ~1 km para los demás).
 
 Hay dos formas de correr el proyecto:
 
@@ -34,14 +46,45 @@ Hay dos formas de correr el proyecto:
 
 - **Docker Desktop** (Windows/macOS) o Docker Engine + Compose (Linux), con
   al menos ~4 GB de RAM asignados a Docker.
+- **Docker Desktop tiene que estar abierto** (el motor corriendo) antes de
+  usar `docker compose`; si no, falla con `dockerDesktopLinuxEngine` (ver
+  "Problemas frecuentes").
 
 ### Pasos
 
-1. Creá el archivo de entorno (no está versionado):
+1. Creá el archivo de entorno y completá las variables obligatorias.
+   `.env` está en `.gitignore`: **nunca se sube** al repositorio.
 
    ```bash
    cp .env.example .env
    # Windows: copy .env.example .env
+   ```
+
+   Obligatorias (el `.env.example` las trae vacías):
+
+   | Variable | Para qué |
+   |---|---|
+   | `JWT_SECRET` | Firma los tokens de sesión. **Mínimo 32 caracteres**; sin él `docker compose` no arranca. |
+   | `DEMO_PASSWORD` | Contraseña del usuario demo (`demo@reunipet.app`), mínimo 8 caracteres. |
+   | `ADMIN_EMAIL` | Correo del primer administrador, creado por el seed. |
+   | `ADMIN_PASSWORD` | Contraseña de ese administrador, mínimo 8 caracteres. |
+
+   El seed asigna las contraseñas **solo la primera vez** (cuando crea la
+   cuenta o si el demo todavía no tiene una): cambiarlas después en `.env` no
+   las modifica.
+
+   Generar un `JWT_SECRET` (48 bytes aleatorios en Base64):
+
+   ```powershell
+   # Windows (PowerShell)
+   $b = New-Object byte[] 48
+   [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+   [Convert]::ToBase64String($b)
+   ```
+
+   ```bash
+   # Linux / macOS
+   openssl rand -base64 48
    ```
 
 2. Levantá todo (base de datos, API y frontend):
@@ -77,14 +120,16 @@ Hay dos formas de correr el proyecto:
   (`db-data`). El puerto 5432 **no** se publica al host (evita choques con un
   PostgreSQL local).
 - **Fotos:** se guardan en el volumen `uploads-data`, montado en
-  `app/apps/api/uploads` dentro del contenedor de la API, y se sirven en
-  `http://localhost:3001/files/...`.
+  `/app/apps/api/uploads` dentro del contenedor de la API, y se sirven en
+  `http://localhost:3001/files/...`. Sobreviven a `docker compose restart` y
+  a `docker compose down` (sin `-v`).
 - **`NEXT_PUBLIC_API_URL`:** se incrusta en el build del frontend como
   `http://localhost:3001` (la URL que usa el navegador), no la URL interna
   `http://api:3001`.
-- **Sesión simulada:** todavía no hay login (llega en Sprints 3/4). La API
-  resuelve el usuario actual con el header `X-User-Id`; si no viene, usa el
-  usuario demo creado por el seed.
+- **Sesión:** `POST /auth/login` devuelve un token JWT (8 h) firmado con
+  `JWT_SECRET`; el frontend lo envía en `Authorization: Bearer <token>`. Las
+  rutas privadas responden 401 sin un token válido, y las cuentas
+  suspendidas reciben `CUENTA_SUSPENDIDA`.
 
 ### Reiniciar con base limpia
 
@@ -156,16 +201,10 @@ copy apps\api\.env.example apps\api\.env
 cp apps/api/.env.example apps/api/.env
 ```
 
-Contenido (ya trae los valores por defecto compatibles con la opción B.1 y la
-B.2):
-
-```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/reunipet?schema=public"
-PORT=3001
-```
-
-Si tu PostgreSQL usa otro usuario o contraseña, cambialo en
-`DATABASE_URL`.
+`DATABASE_URL` ya viene compatible con la opción B.1 y la B.2 (si tu
+PostgreSQL usa otro usuario o contraseña, cambialo ahí). Completá además
+`JWT_SECRET` (obligatorio, mínimo 32 caracteres; se genera como en la
+Opción A), `DEMO_PASSWORD`, `ADMIN_EMAIL` y `ADMIN_PASSWORD`.
 
 Para el frontend podés crear `apps/web/.env.local` (hay un
 `apps/web/.env.example` como punto de partida); si no existe, se usa
@@ -180,10 +219,9 @@ npm run prisma:seed      --workspace apps/api
 
 - `prisma:migrate` aplica las migraciones versionadas en
   `apps/api/prisma/migrations`.
-- `prisma:seed` crea el **usuario demo** (`demo@reunipet.app`). Es
-  obligatorio: sin él, la API responde `404 "Usuario demo no encontrado"`
-  en cualquier endpoint que necesite usuario en sesión (ver
-  `apps/api/src/usuarios/current-user.provider.ts`).
+- `prisma:seed` crea el **usuario demo** (`demo@reunipet.app`, contraseña
+  `DEMO_PASSWORD`) y el **administrador** (`ADMIN_EMAIL` /
+  `ADMIN_PASSWORD`). Es idempotente.
 
 ### 5. Correr el proyecto
 
@@ -213,8 +251,12 @@ Abrí <http://localhost:3000> y probá crear un reporte.
 | Comparador de una coincidencia | `/comparador/<id>`; desde "Comparador Inteligente" del navbar abre la más reciente |
 | Detalle de un reporte, sus fotos y (si es tuyo) el panel de estado: marcar como recuperada / reabrir | `/reportes/<id>` |
 | Registro de usuario ("Crear cuenta" en la barra) | `/registro` |
+| Iniciar sesión | `/login` |
+| Editar un reporte propio | `/reportes/<id>/editar` |
 | Mis reportes: todos tus reportes, su estado y posibles coincidencias | `/mis-reportes` |
-| Mapa | `/mapa` (placeholder: "Disponible próximamente") |
+| Administración (solo `ADMIN`): reportes y usuarios | `/admin` |
+| Mapa para marcar o ver la ubicación de un reporte | En `/reportar/...`, en la edición y en `/reportes/<id>` |
+| Buscar en mapa | `/mapa` ("Disponible próximamente") |
 
 ---
 
@@ -247,7 +289,7 @@ npm run prisma:generate --workspace apps/api
 ### API — unit (sin base de datos)
 
 ```bash
-npm run test --workspace apps/api    # 88 tests (todo mockeado)
+npm run test --workspace apps/api    # 148 tests (todo mockeado)
 ```
 
 ### API — e2e (necesita una base de datos de prueba)
@@ -256,6 +298,12 @@ Los e2e usan `DATABASE_URL` de `apps/api/.env` y **borran** reportes,
 fotografías y coincidencias al finalizar (`deleteMany` en los
 `*.e2e-spec.ts`). No los corras contra una base con datos que quieras
 conservar: usá una base separada (por ejemplo `reunipet_test`).
+
+**Fotos de las pruebas:** las e2e fijan `UPLOADS_DIR` en
+`apps/api/uploads-test` (en `test/setup-env.ts`), así que nunca escriben en
+`apps/api/uploads`, la carpeta de las fotos de desarrollo. Al terminar
+borran solo los archivos que subieron. `UPLOADS_DIR` también sirve para
+cambiar la carpeta de fotos de la API (por defecto, `apps/api/uploads`).
 
 ```bash
 # 1. Crear la base de prueba. Opción con Docker (no requiere PostgreSQL
@@ -270,8 +318,12 @@ docker run --name reunipet-test-pg \
 # Opción con PostgreSQL local (psql, pgAdmin o tu herramienta preferida):
 #   CREATE DATABASE reunipet_test;
 
-# 2. Que apps/api/.env apunte a esa base (5433 si usaste Docker;
-#    5432 si es tu PostgreSQL local)
+# 2. En un clon limpio apps/api/.env no existe: copialo del ejemplo
+#    (Windows: copy apps\api\.env.example apps\api\.env)
+cp apps/api/.env.example apps/api/.env
+#    y apuntá DATABASE_URL a la base de prueba (5433 si usaste Docker;
+#    5432 si es tu PostgreSQL local). JWT_SECRET puede quedar vacío: las e2e
+#    usan uno propio solo para pruebas.
 DATABASE_URL="postgresql://postgres:postgres@localhost:5433/reunipet_test?schema=public"
 
 # 3. Aplicar migraciones y seed (el seed crea el usuario demo,
@@ -280,7 +332,7 @@ npm run prisma:deploy --workspace apps/api
 npm run prisma:seed   --workspace apps/api
 
 # 4. Correr los e2e
-npm run test:e2e --workspace apps/api   # 97 tests
+npm run test:e2e --workspace apps/api   # 141 tests
 ```
 
 Al terminar, si usaste la opción con Docker, borrá el contenedor y su
@@ -293,7 +345,7 @@ docker rm -fv reunipet-test-pg
 ### Web — unit (sin base de datos)
 
 ```bash
-npm run test --workspace apps/web    # 112 tests
+npm run test --workspace apps/web    # 177 tests
 ```
 
 ### Todos los workspaces
@@ -308,7 +360,7 @@ npm run typecheck    # tsc --noEmit en shared + api + web (INCLUYE los archivos 
 > `next build` y `nest build` no revisan los archivos de prueba, así que un
 > error de tipos en un `.test.tsx` o `.spec.ts` solo lo detecta este chequeo.
 
-Total: **297 tests** al cierre del Sprint 3 (api unit 88 + e2e 97 + web 112). Al cierre del Sprint 2 eran 165.
+Total: **466 tests** en el Sprint 4 (api unit 148 + e2e 141 + web 177).
 
 ## Comandos útiles (raíz)
 
@@ -329,7 +381,9 @@ Total: **297 tests** al cierre del Sprint 3 (api unit 88 + e2e 97 + web 112). Al
 | Síntoma | Causa y solución |
 |---|---|
 | `Cannot find module '@reunipet/shared'` o error resolviendo tipos de shared | Falta compilar el paquete: `npm run build --workspace packages/shared` |
-| API responde `404 Usuario demo no encontrado` | Falta el seed: `npm run prisma:seed --workspace apps/api` |
+| `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine` | Docker Desktop no está abierto (o el motor no terminó de arrancar). Abrilo, esperá a que indique que está corriendo y repetí el comando |
+| `docker compose up` falla con `Define JWT_SECRET en .env` | Falta `JWT_SECRET` en el `.env` de la raíz (mínimo 32 caracteres; ver Opción A, paso 1) |
+| No se puede iniciar sesión con el demo o el administrador | Faltaban `DEMO_PASSWORD` o `ADMIN_EMAIL`/`ADMIN_PASSWORD` al correr el seed. Definilos y volvé a correr el seed (en Docker, `docker compose restart api`) |
 | `Environment variable not found: DATABASE_URL` o error de conexión | Revisá `apps/api/.env` (opción B) o el `.env` de la raíz (opción A) y que la DB exista y esté en el puerto correcto |
 | Prisma Client no inicializado / schema no encontrado | `npm run prisma:generate --workspace apps/api` |
 | El frontend no responde o no llega a la API | Que la API esté levantada en el puerto 3001; si usás otro puerto, creá `.env.local` en `apps/web` con `NEXT_PUBLIC_API_URL=http://localhost:<puerto>` |
@@ -343,7 +397,7 @@ ReuniPet/
 ├── apps/
 │   ├── api/          # Backend NestJS + Prisma (puerto 3001)
 │   │   ├── prisma/   # schema, migraciones y seed
-│   │   └── src/      # módulos: reportes, alertas, matching, storage...
+│   │   └── src/      # módulos: auth, admin, reportes, alertas, matching, storage...
 │   └── web/          # Frontend Next.js App Router (puerto 3000)
 ├── packages/
 │   └── shared/       # Tipos y DTOs compartidos api <-> web
