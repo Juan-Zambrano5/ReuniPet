@@ -96,7 +96,9 @@ describe('EditarReporte (HU17)', () => {
   it('cambiar la especie la envía; mover el punto usa PATCH /ubicacion', async () => {
     await abrir();
     fireEvent.click(screen.getByRole('radio', { name: 'gato' }));
-    fireEvent.keyDown(screen.getByTestId('mapa-mock'), { key: 'Enter' });
+    fireEvent.keyDown(await screen.findByTestId('mapa-selector'), {
+      key: 'Enter',
+    });
     guardar();
 
     await waitFor(() => expect(push).toHaveBeenCalled());

@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { ultimoMapa } from '@/__mocks__/leaflet';
 import ReportarPerdidaPage from '@/app/reportar/perdida/page';
 import { leerBorrador } from '@/lib/borrador';
 
@@ -8,21 +9,6 @@ const replace = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace }),
 }));
-
-function stubRect(el: HTMLElement): void {
-  el.getBoundingClientRect = () =>
-    ({
-      left: 0,
-      top: 0,
-      width: 100,
-      height: 100,
-      right: 100,
-      bottom: 100,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }) as DOMRect;
-}
 
 beforeEach(() => {
   push.mockClear();
@@ -36,12 +22,11 @@ beforeEach(() => {
 });
 
 describe('Página reportar/perdida (HU9 AC1/AC2)', () => {
-  it('permite marcar la última ubicación vista y la guarda en el borrador', () => {
+  it('permite marcar la última ubicación vista y la guarda en el borrador', async () => {
     render(<ReportarPerdidaPage />);
 
-    const mapa = screen.getByTestId('mapa-mock');
-    stubRect(mapa);
-    fireEvent.click(mapa, { clientX: 100, clientY: 100 });
+    await screen.findByTestId('mapa-selector');
+    act(() => ultimoMapa().clic(7.88, -72.51));
 
     fireEvent.click(screen.getByRole('radio', { name: /perro/i }));
     fireEvent.change(screen.getByLabelText(/^color/i), {
@@ -57,8 +42,8 @@ describe('Página reportar/perdida (HU9 AC1/AC2)', () => {
     expect(global.fetch).not.toHaveBeenCalled();
 
     const borrador = leerBorrador();
-    expect(borrador?.latitud).toBeCloseTo(10.4, 5);
-    expect(borrador?.longitud).toBeCloseTo(-66.85, 5);
+    expect(borrador?.latitud).toBe(7.88);
+    expect(borrador?.longitud).toBe(-72.51);
   });
 
   it('el borrador queda sin coordenadas si no se marca el mapa', () => {

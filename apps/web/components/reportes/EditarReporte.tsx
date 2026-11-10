@@ -348,6 +348,7 @@ export function EditarReporte({ id }: EditarReporteProps): React.JSX.Element {
             <p className="text-sm font-semibold text-text">Ubicación en el mapa</p>
             <MapaSelector
               value={punto}
+              disabled={guardando}
               onChange={(nuevo) => {
                 setPunto(nuevo);
                 setAviso(null);

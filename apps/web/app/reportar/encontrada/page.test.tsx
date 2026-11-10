@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { ultimoMapa } from '@/__mocks__/leaflet';
 import ReportarEncontradaPage from '@/app/reportar/encontrada/page';
 import { leerBorrador } from '@/lib/borrador';
 
@@ -8,21 +9,6 @@ const replace = jest.fn();
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace }),
 }));
-
-function stubRect(el: HTMLElement): void {
-  el.getBoundingClientRect = () =>
-    ({
-      left: 0,
-      top: 0,
-      width: 100,
-      height: 100,
-      right: 100,
-      bottom: 100,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }) as DOMRect;
-}
 
 function completarCampos(): void {
   fireEvent.click(screen.getByRole('radio', { name: /perro/i }));
@@ -49,9 +35,8 @@ describe('Página reportar/encontrada (HU3 — 2 pasos)', () => {
   it('AC2: marca un punto en el mapa, guarda el borrador y avanza al paso 2 sin publicar', async () => {
     render(<ReportarEncontradaPage />);
 
-    const mapa = screen.getByTestId('mapa-mock');
-    stubRect(mapa);
-    fireEvent.click(mapa, { clientX: 50, clientY: 25 });
+    await screen.findByTestId('mapa-selector');
+    act(() => ultimoMapa().clic(7.9, -72.5));
     expect(screen.getByTestId('mapa-coordenadas')).toHaveTextContent(
       'Punto marcado',
     );
@@ -65,9 +50,8 @@ describe('Página reportar/encontrada (HU3 — 2 pasos)', () => {
 
     const borrador = leerBorrador();
     expect(borrador?.tipo).toBe('ENCONTRADA');
-    // y=25% → lat = 10.5 - 0.25*0.1 = 10.475; x=50% → lng = -66.95 + 0.05
-    expect(borrador?.latitud).toBeCloseTo(10.475, 5);
-    expect(borrador?.longitud).toBeCloseTo(-66.9, 5);
+    expect(borrador?.latitud).toBe(7.9);
+    expect(borrador?.longitud).toBe(-72.5);
   });
 
   it('AC1: sin mapa puede avanzar solo con la dirección escrita', () => {
