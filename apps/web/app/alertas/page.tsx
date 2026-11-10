@@ -1,12 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertaResponse, EstadoCoincidencia } from '@reunipet/shared';
 import { AlertCard } from '@/components/alertas/AlertCard';
 import { RecientesZona } from '@/components/alertas/RecientesZona';
-import { MapPin } from 'lucide-react';
 import { descartarAlerta, getAlertas } from '@/lib/api';
 import { tiempoRelativo } from '@/lib/tiempo';
 
@@ -63,34 +61,8 @@ export default function AlertasPage(): React.JSX.Element {
         Posibles coincidencias con tus reportes
       </p>
 
-      {/* Bloque 1: Mapa de Alertas (visual; el mapa real es placeholder) */}
-      <section
-        className="mt-6 rounded-card border border-border bg-card p-6 shadow-card"
-        aria-labelledby="mapa-alertas-title"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 id="mapa-alertas-title" className="text-lg font-semibold text-text">
-              Mapa de Alertas
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              Visualiza de un vistazo los reportes activos alrededor de tu zona.
-            </p>
-          </div>
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-control bg-primary-soft">
-            <MapPin className="h-5 w-5 text-primary" aria-hidden />
-          </span>
-        </div>
-        <Link
-          href="/mapa"
-          className="mt-4 inline-flex text-sm font-medium text-primary hover:underline"
-        >
-          Abrir mapa interactivo →
-        </Link>
-      </section>
-
-      {/* Bloque 2: Tus coincidencias (HU4 — backend real) */}
-      <section className="mt-8" aria-labelledby="tus-coincidencias-title">
+      {/* Bloque 1: Tus coincidencias (HU4 — backend real) */}
+      <section className="mt-6" aria-labelledby="tus-coincidencias-title">
         <h2 id="tus-coincidencias-title" className="text-lg font-semibold text-text">
           Tus coincidencias
         </h2>
@@ -131,7 +103,7 @@ export default function AlertasPage(): React.JSX.Element {
         </p>
       )}
 
-      {/* Bloque 3: Recientes en tu zona — HU6 (reportes perdidos reales) */}
+      {/* Bloque 2: Recientes en tu zona — HU6 (reportes perdidos reales) */}
       <section className="mt-8" aria-labelledby="recientes-title">
         <div className="flex items-center gap-2">
           <h2 id="recientes-title" className="text-lg font-semibold text-text">

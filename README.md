@@ -256,7 +256,6 @@ Abrí <http://localhost:3000> y probá crear un reporte.
 | Mis reportes: todos tus reportes, su estado y posibles coincidencias | `/mis-reportes` |
 | Administración (solo `ADMIN`): reportes y usuarios | `/admin` |
 | Mapa para marcar o ver la ubicación de un reporte | En `/reportar/...`, en la edición y en `/reportes/<id>` |
-| Buscar en mapa | `/mapa` ("Disponible próximamente") |
 
 ---
 

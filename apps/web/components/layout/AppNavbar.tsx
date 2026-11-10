@@ -31,11 +31,6 @@ const LINKS: NavLink[] = [
     isActive: (p) => p.startsWith('/alertas'),
   },
   {
-    href: '/mapa',
-    label: 'Buscar en Mapa',
-    isActive: (p) => p.startsWith('/mapa'),
-  },
-  {
     href: '/mis-reportes',
     label: 'Mis reportes',
     isActive: (p) => p.startsWith('/mis-reportes'),

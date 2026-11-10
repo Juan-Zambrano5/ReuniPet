@@ -63,6 +63,14 @@ describe('AppNavbar (HU12 + HU16)', () => {
   });
 });
 
+describe('AppNavbar (alcance)', () => {
+  it('no tiene "Buscar en Mapa" (no hay pantalla de mapa con varios reportes)', () => {
+    render(<AppNavbar />);
+    expect(screen.queryByText(/buscar en mapa/i)).not.toBeInTheDocument();
+    expect(document.querySelector('a[href="/mapa"]')).toBeNull();
+  });
+});
+
 describe('AppNavbar (HU18)', () => {
   it('"Administración" solo aparece con rol ADMIN', async () => {
     window.localStorage.setItem('reunipet:token', 'jwt');

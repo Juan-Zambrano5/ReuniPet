@@ -88,4 +88,19 @@ describe('/alertas (HU4 AC3)', () => {
     expect(await screen.findByText(/no se pudo descartar/i)).toBeInTheDocument();
     expect(screen.getByTestId('alerta-a')).toBeInTheDocument();
   });
+
+  it('no muestra "Mapa de Alertas"; sí "Tus coincidencias" y "Recientes en tu zona"', async () => {
+    getAlertasMock.mockResolvedValue([]);
+    render(<AlertasPage />);
+
+    expect(await screen.findByTestId('sin-alertas')).toBeInTheDocument();
+    expect(screen.queryByText(/mapa de alertas/i)).not.toBeInTheDocument();
+    expect(document.querySelector('a[href="/mapa"]')).toBeNull();
+    expect(
+      screen.getByRole('heading', { name: 'Tus coincidencias' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Recientes en tu zona' }),
+    ).toBeInTheDocument();
+  });
 });

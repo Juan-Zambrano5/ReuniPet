@@ -2,7 +2,6 @@ import Link from 'next/link';
 import {
   ArrowRight,
   Bell,
-  MapPinned,
   PawPrint,
   PlusCircle,
   Search,
@@ -27,12 +26,6 @@ const ACCIONES = [
     titulo: 'Ver alertas activas',
     descripcion: 'Revisa las coincidencias detectadas por el comparador.',
     icono: Bell,
-  },
-  {
-    href: '/mapa',
-    titulo: 'Buscar en el mapa',
-    descripcion: 'Disponible próximamente.',
-    icono: MapPinned,
   },
 ];
 
@@ -69,7 +62,7 @@ export default function HomePage(): React.JSX.Element {
         </div>
       </section>
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
         {ACCIONES.map((accion) => (
           <Link
             key={accion.href}
