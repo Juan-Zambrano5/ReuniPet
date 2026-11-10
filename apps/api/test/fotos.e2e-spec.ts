@@ -6,6 +6,7 @@ import request from 'supertest';
 import sharp from 'sharp';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { uploadsDir } from '../src/storage/local-storage.service';
 import { auth, crearUsuarioConSesion, sesionDemo } from './helpers/sesion';
 
 const PNG_1x1 = Buffer.from(
@@ -18,6 +19,11 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
   let prisma: PrismaService;
   let reporteId: string;
   let demoToken: string;
+  // Archivos que esta prueba sube: los únicos que borra al terminar.
+  const subidas: string[] = [];
+  const registrar = (body: { url: string }[]): void => {
+    subidas.push(...body.map((f) => path.basename(f.url)));
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -51,14 +57,18 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
   });
 
   afterAll(async () => {
-    const uploads = path.join(process.cwd(), 'uploads');
-    if (fs.existsSync(uploads)) {
-      for (const f of fs.readdirSync(uploads)) fs.rmSync(path.join(uploads, f));
+    try {
+      const dir = uploadsDir();
+      if (path.basename(path.resolve(dir)) !== 'uploads-test') {
+        throw new Error(`No se borran fotos fuera de uploads-test: ${dir}`);
+      }
+      for (const f of subidas) fs.rmSync(path.join(dir, f), { force: true });
+    } finally {
+      await prisma.coincidencia.deleteMany();
+      await prisma.fotografia.deleteMany();
+      await prisma.reporte.deleteMany();
+      await app.close();
     }
-    await prisma.coincidencia.deleteMany();
-    await prisma.fotografia.deleteMany();
-    await prisma.reporte.deleteMany();
-    await app.close();
   });
 
   it('AC1: sube una imagen válida y la asocia al reporte', async () => {
@@ -71,11 +81,21 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
     expect(res.body).toHaveLength(1);
     expect(res.body[0]).toMatchObject({ reporteId, orden: 0 });
     expect(res.body[0].url).toMatch(/^\/files\//);
+    registrar(res.body);
 
     const guardada = await prisma.fotografia.findUnique({
       where: { id: res.body[0].id },
     });
     expect(guardada).not.toBeNull();
+  });
+
+  it('las fotos de las pruebas van a uploads-test, nunca a apps/api/uploads', () => {
+    expect(path.basename(uploadsDir())).toBe('uploads-test');
+    const nombre = subidas[0];
+    expect(fs.existsSync(path.join(uploadsDir(), nombre))).toBe(true);
+    expect(
+      fs.existsSync(path.join(__dirname, '..', 'uploads', nombre)),
+    ).toBe(false);
   });
 
   it('AC2: devuelve 400 con mensaje claro si el archivo no es una imagen válida', async () => {
@@ -92,12 +112,13 @@ describe('HU2 — POST /reportes/:id/fotos', () => {
     const antes = await prisma.fotografia.count({ where: { reporteId } });
     expect(antes).toBe(1);
 
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post(`/reportes/${reporteId}/fotos`)
       .set(auth(demoToken))
       .attach('fotos', PNG_1x1, 'segunda.png')
       .attach('fotos', PNG_1x1, 'tercera.png')
       .expect(201);
+    registrar(res.body);
 
     const despues = await prisma.fotografia.count({ where: { reporteId } });
     expect(despues).toBe(antes + 2);

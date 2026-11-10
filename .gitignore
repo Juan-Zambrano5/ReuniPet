@@ -9,6 +9,7 @@ coverage/
 prisma/*.db
 *.log
 uploads/
+uploads-test/
 
 # Documentos internos que no deben versionarse
 AGENTS.md

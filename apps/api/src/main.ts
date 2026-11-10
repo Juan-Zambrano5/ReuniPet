@@ -2,8 +2,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
 import { AppModule } from './app.module';
+import { uploadsDir as carpetaUploads } from './storage/local-storage.service';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -16,7 +16,7 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  const uploadsDir = join(process.cwd(), 'uploads');
+  const uploadsDir = carpetaUploads();
   if (!existsSync(uploadsDir)) {
     mkdirSync(uploadsDir, { recursive: true });
   }
