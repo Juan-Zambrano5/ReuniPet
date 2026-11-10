@@ -26,6 +26,12 @@ export class MapaFalso extends Evented {
   eliminado = false;
   /** Lo que contiene la vista; las pruebas lo cambian para forzar el centrado. */
   contieneVista = false;
+  scrollWheelZoom = {
+    activo: true,
+    disable(): void {
+      this.activo = false;
+    },
+  };
   constructor(public contenedor: HTMLElement) {
     super();
   }

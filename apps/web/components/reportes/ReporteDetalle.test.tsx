@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { EstadoReporte, ReporteResponse, TipoReporte } from '@reunipet/shared';
 import { ReporteDetalle } from '@/components/reportes/ReporteDetalle';
 import { ApiError, cambiarEstadoReporte, getReporte } from '@/lib/api';
+import { capasDe, ultimoMapa } from '@/__mocks__/leaflet';
 
 jest.mock('@/lib/api', () => ({
   getReporte: jest.fn(),
@@ -71,52 +72,67 @@ describe('ReporteDetalle (HU6 AC3)', () => {
     ).toBeInTheDocument();
   });
 
-  it('HU9 AC3: a un tercero muestra las coordenadas como zona aproximada', async () => {
-    getReporteMock.mockResolvedValue(reporte);
+  describe('HU13: mapa de la ubicación', () => {
+    // El frontend no distingue tercero de anónimo: a ambos el API les manda
+    // esPropietario=false y coordenadas ya aproximadas (cubierto en las e2e).
+    it('tercero o anónimo: círculo de ~1 km, sin marcador ni coordenadas en números', async () => {
+      getReporteMock.mockResolvedValue(reporte);
+      render(<ReporteDetalle id="rep-1" />);
 
-    render(<ReporteDetalle id="rep-1" />);
-
-    expect(await screen.findByTestId('reporte-coordenadas')).toHaveTextContent(
-      '10.12, -66.99',
-    );
-    expect(screen.getByTestId('reporte-precision')).toHaveTextContent(
-      'Zona aproximada (~1 km)',
-    );
-  });
-
-  it('HU9 AC3: al propietario le muestra el punto exacto', async () => {
-    getReporteMock.mockResolvedValue({
-      ...reporte,
-      latitud: 10.12345,
-      longitud: -66.98765,
-      esPropietario: true,
-      moderado: false,
-      motivoModeracion: null,
+      await screen.findByTestId('mapa-ubicacion');
+      const mapa = ultimoMapa();
+      expect(capasDe(mapa, 'marker')).toHaveLength(0);
+      const [zona] = capasDe(mapa, 'circle');
+      expect(zona.latlng).toEqual({ lat: 10.12, lng: -66.99 });
+      expect(zona.opciones.radius).toBe(1000);
+      expect(screen.getByTestId('reporte-precision')).toHaveTextContent(
+        'Zona aproximada',
+      );
+      expect(screen.queryByTestId('reporte-coordenadas')).not.toBeInTheDocument();
+      expect(document.body).not.toHaveTextContent('10.12');
+      expect(document.body).not.toHaveTextContent('-66.99');
     });
 
-    render(<ReporteDetalle id="rep-1" />);
+    it('dueño: marcador en el punto exacto con "Punto exacto"', async () => {
+      getReporteMock.mockResolvedValue({
+        ...reporte,
+        latitud: 10.12345,
+        longitud: -66.98765,
+        esPropietario: true,
+        moderado: false,
+        motivoModeracion: null,
+      });
+      render(<ReporteDetalle id="rep-1" />);
 
-    expect(await screen.findByTestId('reporte-coordenadas')).toHaveTextContent(
-      '10.12345, -66.98765',
-    );
-    expect(screen.getByTestId('reporte-precision')).toHaveTextContent(
-      'Punto exacto',
-    );
-  });
-
-  it('HU9: sin coordenadas no se muestra la fila de coordenadas', async () => {
-    getReporteMock.mockResolvedValue({
-      ...reporte,
-      latitud: null,
-      longitud: null,
+      await screen.findByTestId('mapa-ubicacion');
+      const mapa = ultimoMapa();
+      expect(capasDe(mapa, 'circle')).toHaveLength(0);
+      expect(capasDe(mapa, 'marker')[0].latlng).toEqual({
+        lat: 10.12345,
+        lng: -66.98765,
+      });
+      expect(mapa.centro).toEqual({ lat: 10.12345, lng: -66.98765 });
+      expect(screen.getByTestId('reporte-precision')).toHaveTextContent(
+        'Punto exacto',
+      );
+      expect(screen.getByTestId('reporte-coordenadas')).toHaveTextContent(
+        '10.12345, -66.98765',
+      );
     });
 
-    render(<ReporteDetalle id="rep-1" />);
+    it('sin coordenadas no hay mapa, solo el texto de ubicación', async () => {
+      getReporteMock.mockResolvedValue({
+        ...reporte,
+        latitud: null,
+        longitud: null,
+      });
+      render(<ReporteDetalle id="rep-1" />);
 
-    expect(await screen.findByText('Detalle del reporte')).toBeInTheDocument();
-    expect(
-      screen.queryByTestId('reporte-coordenadas'),
-    ).not.toBeInTheDocument();
+      expect(await screen.findByText('Parque Central')).toBeInTheDocument();
+      expect(screen.queryByTestId('mapa-ubicacion')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('mapa-cargando')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('reporte-precision')).not.toBeInTheDocument();
+    });
   });
 });
 

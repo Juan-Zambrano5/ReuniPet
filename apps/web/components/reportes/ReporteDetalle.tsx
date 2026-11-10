@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { ApiError, cambiarEstadoReporte, fotoUrl, getReporte } from '@/lib/api';
 import { tiempoRelativo } from '@/lib/tiempo';
 import { FotoReporte } from '@/components/fotos/FotoReporte';
+import { MapaUbicacion } from '@/components/reportes/MapaUbicacion';
 
 interface ReporteDetalleProps {
   id: string;
@@ -267,32 +268,50 @@ export function ReporteDetalle({ id }: ReporteDetalleProps): React.JSX.Element {
                 {reporte.ubicacion ?? '—'}
               </dd>
             </div>
-            {reporte.latitud !== null && reporte.longitud !== null && (
-              <div className="flex justify-between gap-2">
-                <dt className="text-muted">Coordenadas</dt>
-                <dd
-                  className="text-right font-medium text-text"
-                  data-testid="reporte-coordenadas"
-                >
-                  <span>
-                    {reporte.latitud}, {reporte.longitud}
-                  </span>
-                  <span
-                    className={`mt-1 block rounded-pill px-2 py-0.5 text-[11px] font-semibold ${
-                      reporte.esPropietario
-                        ? 'bg-primary-soft text-primary'
-                        : 'bg-surface text-muted'
-                    }`}
-                    data-testid="reporte-precision"
+            {/* Las coordenadas en números solo las ve el dueño (son exactas). */}
+            {reporte.esPropietario &&
+              reporte.latitud !== null &&
+              reporte.longitud !== null && (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-muted">Coordenadas</dt>
+                  <dd
+                    className="text-right font-medium text-text"
+                    data-testid="reporte-coordenadas"
                   >
-                    {reporte.esPropietario
-                      ? 'Punto exacto (tú eres el propietario)'
-                      : 'Zona aproximada (~1 km)'}
-                  </span>
-                </dd>
-              </div>
-            )}
+                    {reporte.latitud}, {reporte.longitud}
+                  </dd>
+                </div>
+              )}
           </dl>
+
+          {/* HU13: mapa solo si hay coordenadas. A terceros les llegan
+              aproximadas (~1 km) y se dibujan como zona, sin marcador. */}
+          {reporte.latitud !== null && reporte.longitud !== null && (
+            <section className="mt-6" aria-labelledby="titulo-mapa">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h2 id="titulo-mapa" className="text-sm font-semibold text-text">
+                  Ubicación en el mapa
+                </h2>
+                <span
+                  className={`rounded-pill px-2 py-0.5 text-[11px] font-semibold ${
+                    reporte.esPropietario
+                      ? 'bg-primary-soft text-primary'
+                      : 'bg-surface text-muted'
+                  }`}
+                  data-testid="reporte-precision"
+                >
+                  {reporte.esPropietario
+                    ? 'Punto exacto'
+                    : 'Zona aproximada (~1 km)'}
+                </span>
+              </div>
+              <MapaUbicacion
+                lat={reporte.latitud}
+                lng={reporte.longitud}
+                exacto={reporte.esPropietario}
+              />
+            </section>
+          )}
         </div>
       </div>
 
